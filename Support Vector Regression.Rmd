@@ -1,0 +1,199 @@
+---
+title: "Support Vector Regression"
+author: "KN Mnisi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load the required package
+```{r}
+library(kernlab)
+library(readxl)
+library(dplyr)
+library(caret)
+library(ggplot2)
+```
+Load data, remove unnecessary variables and then change categorical data into numeric data
+```{r}
+data <- read_excel("Clean_AmesHousing.xlsx")
+```
+
+```{r}
+# Calculate z-scores
+z_scores <- scale(data$SalePrice)
+
+# Set the threshold for outliers
+threshold <- 3
+
+# Remove outliers
+data <- data[abs(z_scores) < threshold, ]
+```
+
+```{r}
+data <- subset(data, select = -c(PID, Order))
+mean <- mean(data$SalePrice)
+
+target_column_index <- 79
+
+features <- data[,-target_column_index]
+
+categorical_var <- names(data %>%
+                           select_if(is.character))
+
+for (col in categorical_var) {
+  data[[col]] <- as.numeric(factor(data[[col]]))
+}
+```
+
+```{r}
+# Split the data into training and testing sets (or use cross-validation)
+set.seed(1)
+target <- "SalePrice"
+y <- data[[target]]
+data1 <- data[, !colnames(data) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+Create the SVR model using the ksvm function
+```{r}
+svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
+```
+
+
+```{r}
+predictions <- predict(svr_model, test_X)
+comb <- data.frame(obs = test_Y, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the model
+```{r}
+r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae/mean)*100,2)
+
+# Print the evaluation metrics
+cat("R-squared:", r_squared,"%", "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+```
+
+
+
+
+```{r}
+# Define the 'svmRadial' function for the SVR method
+svmRadial_func <- function(x, y, ...){
+  kernlab::ksvm(x, y, type = "eps-svr", kernel = "rbfdot", kpar = "automatic", ...)
+}
+
+# Create the caretFuncs list with the 'svmRadial' function
+caretFuncs <- list(svmRadial = svmRadial_func)
+
+# Feature Selection using Recursive Feature Elimination (RFE)
+num_features_to_select <- 40  # Set the desired number of features
+ctrl <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
+rfe_results <- rfe(train_X, train_Y,
+                   sizes = num_features_to_select,
+                   rfeControl = ctrl,
+                   method = "svmRadial")
+```
+
+
+```{r}
+top40 <- data.frame(rfe_results$variables[318:357,1:2])
+```
+
+Create the bar chart
+```{r}
+ggplot(top40, aes(y = reorder(var, Overall), x = Overall)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(y = "Variable Name", x = "Overall Score", title = "Top 40 Important Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+```
+
+Create the data for modeling (removing the target variable)
+```{r}
+features <- data[,-target_column_index]
+top40 <- top40$var
+top40 <- data[, top40]
+train_X <- as.matrix(top40[train_indices, ])
+test_X <- as.matrix(top40[-train_indices, ])
+```
+
+Create the SVR model using the ksvm function
+```{r}
+svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
+```
+
+```{r}
+predictions <- predict(svr_model, as.matrix(test_X))
+comb <- data.frame(obs = test_Y, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the model
+```{r}
+r <- 1 - sum((test_Y - predictions)^2) / sum((test_Y - mean(test_Y))^2)
+r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae/mean)*100,2)
+
+# Print the evaluation metrics
+cat("R-squared:", r_squared,"%",r, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+
+```
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```

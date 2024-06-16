@@ -1,0 +1,842 @@
+---
+title: "DECIPHERING THE INTRICATE RELATIONSHIPS WITHIN THE HOUSING MARKET"
+author: "KN Mnisi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Packages
+```{r}
+library(doBy)
+library(dplyr)
+library(readr)
+library(corrplot)
+library(RColorBrewer)
+library(mice)
+```
+
+Original Dataset
+```{r}
+AmesHousing <- read_csv("AmesHousing.csv")
+View(AmesHousing)
+```
+
+Calculating the number of NA values and the percentage of NA values in each column 
+```{r}
+Total_Na_Values <- colSums(is.na(AmesHousing))
+Percentage <- floor(Total_Na_Values / nrow(AmesHousing) * 100)
+NA_Counts <- cbind.data.frame(Total_Na_Values, Percentage)
+```
+
+Calculating the total number of variables that has NA values
+```{r}
+(nonzero_rows <- sum(rowSums(NA_Counts != 0) > 0))
+```
+There are 27 variables containing NA values namely (Sorted in descending order):
+```{r}
+nonzero_observations <- NA_Counts[rowSums(NA_Counts != 0) > 0, ]
+(sorted_observations <- nonzero_observations[order(-nonzero_observations$Total_Na_Values), ])
+```
+However, there are numerous ways to deal with NA observations in a dataset
+1. Removing missing values: You can remove rows or columns with missing values from
+   the dataset using the na.omit() or complete.cases() functions, respectively.
+2. Replacing missing values: You can replace missing values with a value based on the 
+   type of data. For example, you can replace missing numeric values with the mean or 
+   median of the column, or replace missing categorical values with the mode etc.
+3. Using imputation techniques: You can use more advanced imputation techniques to fill 
+   in missing values. There are several R packages that provide imputation functions, 
+   such as mice, missForest, and Amelia. 
+   
+Within the Ames dataset, there are five variables that contain a substantial number of missing values. These variables and their corresponding percentages of missing values are as follows: Alley (99%), Fire Place Qu (96%), Pool QC (93%), Fence (80%), Misc Feature (48%), and Lot Frontage (16%). Notably, the first four variables can be substituted with descriptive categories to indicate the absence of certain features. Specifically, "no alley access" (NAA), "no fireplace" (NFP), "no pool" (NP), and "no miscellaneous features" (NMF) respectively. However, the lot frontage variable cannot be replaced using such descriptive categories as there is no available information to determine the meaning behind the missing values. As a result, the NA values in this variable can be omited. 
+
+```{r}
+AmesHousing$Alley <- replace(AmesHousing$Alley, is.na(AmesHousing$Alley), "NAA")
+AmesHousing$`Fireplace Qu` <- replace(AmesHousing$`Fireplace Qu`, 
+                                      is.na(AmesHousing$`Fireplace Qu`), "NFP")
+AmesHousing$`Pool QC` <- replace(AmesHousing$`Pool QC`, is.na(AmesHousing$`Pool QC`), "NP")
+AmesHousing$Fence <- replace(AmesHousing$Fence, is.na(AmesHousing$Fence), "NF")
+AmesHousing$`Misc Feature` <- replace(AmesHousing$`Misc Feature`, 
+                                      is.na(AmesHousing$`Misc Feature`), "NMF")
+AmesHousing
+```
+
+The presence of NA values in the garage-related variables, namely garage type (nominal), garage cond (ordinal), garage qual (nominal), garage finish (nominal), and garage yr blt (discrete), indicates the absence of a garage in the respective houses. It is worth noting that these variables collectively exhibit a consistent occurrence rate of 5% (157 values for every variable) for NA values. To address the missing values in the nominal and ordinal variables, a suitable approach is to substitute the NA values with the "no garage" (NG) category. This maintains consistency in the dataset and facilitates further analysis and interpretation. However, given that the "garage yr blt" variable represents discrete construction years, it is not advisable to replace its NA values with "no garage" or any other specific value. Omitting the NA values in this variable would be a more appropriate course of action. Consequently, by omitting the NA values in the "garage yr blt" variable, the NA values in the remaining four garage-related variables will also be eliminated.
+
+Among the basement-related variables in the dataset, several variables exhibit a consistent occurrence of 2% NA values. These variables include "bsmt exposure" (with 83 NA values), "bsmt qual" (with 80 NA values), "bsmt cond" (with 80 NA values), "bsmtfin type 1" (with 80 NA values), and "bsmtfin type 2" (with 81 NA values). It is worth noting that the number of NA values in each variable is not uniform, making it unwise to assume and replace all NA values with a generic category such as "no basement." Given the relatively insignificant percentage of NA values in these variables, it is reasonable to omit the NA values during analysis. This omission would lead to the elimination of the NA values in other basement-related variables, namely "bsmt full bath," "bsmt half bath," "bsmtfin sf 1," "bsmtfin sf 2," "bsmt unf sf," and "total bsmt sf."
+
+The "Mas Vnr Type" and "Mas Vnr Area" variables in the dataset have two missing values each, signifying the absence or unavailability of information regarding the type or area measurement of the masonry veneer for certain properties. Therefore, it is appropriate to remove these missing values from the dataset. Similarly, the "Electrical" variable has one missing value, suggesting missing or unavailable information about the type of electrical system in a specific house. This missing value can also be omitted from the analysis. Additionally, the "Garage Cars" and "Garage Area" variables each have one missing value, representing missing information related to the number of cars the garage can accommodate and the area of the garage, respectively. Omitting these missing values ensures data integrity and enables analysis based on complete and reliable information for the respective variables.
+
+In summary, all other NA values present in the dataset besides the NA values for the variables: "Alley", "Fire Place Qu", "Pool QC", "Fence" and "Misc Feature", will be ommited. This will result to the dataset having 
+
+The above adjustments resulted in the dataset having 2218 observations instead of the initial 2930 observations, meaning 712 (24.3%) observations were ommited. 
+```{r}
+```
+Identify observations with a non-missing value in "Garage Type" but missing values in garage-related variables
+
+```{r}
+AmesHousing <- subset(AmesHousing, select = -`Garage Yr Blt`)
+```
+
+```{r}
+AmesHousing$`Has Garage` <- NA
+AmesHousing$`Has Garage` <- ifelse(AmesHousing$`Garage Area` == 0, 0, 1)
+```
+
+Removing spaces from variables for effective imputation (Using the mice package)
+```{r}
+names(AmesHousing)[5] <- "LotFrontage"
+names(AmesHousing)[6] <- "LotArea"
+names(AmesHousing)[9] <- "LotShape"
+names(AmesHousing)[4] <- "MSZoning"
+names(AmesHousing)[12] <-"LotConfig"
+
+```
+
+```{r}
+vars <- c("LotFrontage", "LotArea", "LotShape", "Neighborhood", "MSZoning", "Street", "LotConfig")
+dataset <- AmesHousing[, vars]
+imp_model <- mice(dataset, method = "pmm", m = 1, maxit = 50)
+imputed_data <- complete(imp_model, action = "long", include = TRUE)
+AmesHousing$LotFrontage <- imputed_data$LotFrontage[2931:5860]
+AmesHousing$`Lot Frontage` <- AmesHousing$LotFrontage
+```
+
+Returning the variables be its original format
+```{r}
+names(AmesHousing)[5] <- "Lot Frontage"
+names(AmesHousing)[6] <- "Lot Area"
+names(AmesHousing)[9] <- "Lot Shape"
+names(AmesHousing)[4] <- "MS Zoning"
+names(AmesHousing)[12] <-"Lot Config"
+```
+
+Assign "NG" (No garage) to variables when `Has Garage` is 0
+```{r}
+AmesHousing$`Garage Type`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Cond`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Finish`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Qual`[AmesHousing$`Has Garage` == 0] <- "NG"
+```
+Assing "NB" (No basement) to variables when `Total Bsmt SF` is 0
+```{r}
+AmesHousing$`Bsmt Exposure`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`Bsmt Cond`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`Bsmt Qual`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`BsmtFin Type 1`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`BsmtFin Type 2`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+```
+Omit any other null values in the dataset
+```{r}
+AmesHousing <- na.omit(AmesHousing)
+AmesHousing <- AmesHousing[,1:82]
+nrow(AmesHousing)
+```
+
+Checking for outliers in the SalePrice variable
+```{r}
+options(scipen = 999)
+par(mar = c(5, 4, 4, 2) + 0.4, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+par(las = 1, yaxs = "i")
+boxplot(AmesHousing$SalePrice,
+        main = "Box Plot of Sale Price",
+        ylab = "Sale Price",
+        ylim = c(0,755000))
+```
+
+The analysis of the Box plot for the Sale Price variable reveals a notable right-skewness in its distribution. Specifically, the plot demonstrates a positively skewed pattern where the majority of data points are concentrated towards lower values, accompanied by a pronounced elongated right tail. This characteristic signifies the existence of outliers or higher values that substantially deviate from the general trend observed in the dataset.
+Calculate the z-scores in order to identify the outliers.
+
+```{r}
+z_scores <- scale(AmesHousing$SalePrice)
+# Identify outliers
+outliers <- which(abs(z_scores) > 3)
+(outliers <- AmesHousing[outliers, ])
+```
+
+Based on the z-scores approach, a thorough analysis reveals the presence of 33 outliers within the Sale Price variable. While outliers often require careful consideration and treatment in data cleaning processes, this particular study refrains from addressing them during the initial dataset cleaning stage. This decision stems from the fact that the proposed algorithms employed in the study possess the ability to handle outliers, and furthermore, there exists a possibility that these outliers may hold valuable insights or unique characteristics worth exploring further.
+```{r}
+```
+
+Correlation Plot for all numeric variables in the Ames Dataset, excluding the "Order" Variable
+```{r}
+numeric_cols <- AmesHousing[sapply(AmesHousing, is.numeric)][,2:37]
+cor_matrix <- cor(numeric_cols)
+corrplot(cor_matrix, method = "color",tl.cex = 0.5, col = colorRampPalette(brewer.pal(11, "RdYlBu"))(100))
+# corrplot(cor_matrix, method = "color", tl.cex = 0.5, col = c("#FF0000", "#00FF00", "#0000FF"))
+
+```
+Upon examining the correlation plot, a notable and robust positive correlation is evident between the "Overall Quality" variable and the Sale Price of houses. This observation indicates that higher overall quality ratings are associated with higher sale prices in a scientifically significant manner... (to be continued)
+```{r}
+```
+
+Calculating the mean sale price for every year. 
+```{r}
+Year_Sold <- AmesHousing$`Yr Sold`
+Sale_Price <- AmesHousing$SalePrice
+data <- data.frame(Year_Sold, Sale_Price)
+means <- aggregate(Sale_Price ~ Year_Sold, AmesHousing, mean)
+means
+```
+The highest mean Sale Price was observed in 2007 while the lowest was observed in 2010.
+This pattern could be explained by the 2008 global financial crisis, which had a 
+significant impact on the housing market in many countries. The crisis led to a decrease in demand for housing and a decrease in home values.Iowa was one of the states that was
+hit hard by the crisis, with many homeowners facing foreclosure and declining home values.
+This could have led to lower sale prices in Ames in 2010.
+```{r}
+```
+Machine Learning Techniques used: 
+
+1. Random Forest
+
+Random forest model that uses all the explanatory variables from the AmesHousing dataset to predict the saling price of a property (House)
+
+Packages needed
+```{r}
+library(readxl)
+library(caret)
+library(randomForest)
+library(tibble)
+```
+Loading the pre-processed AmesHousing dataset inclusive of outliers
+```{r}
+data <- read_excel("Clean_AmesHousing.xlsx")
+```
+The model was fitted initially, but the presence of outliers has resulted in an increased mean absolute error. Consequently, to address this issue, the model will be refitted using a dataset from which the outliers have been removed.
+```{r}
+# Calculate z-scores
+z_scores <- scale(data$SalePrice)
+
+# Set the threshold for outliers
+threshold <- 3
+
+# Remove outliers
+data <- data[abs(z_scores) < threshold, ]
+```
+Modifying the variable names because the randomForest function is sensitive to special characters
+```{r}
+new_names <- gsub(" ", "", names(data))
+names(data) <- new_names
+names(data)[22] <- "YearRemodORAdd"
+names(data)[45] <- "FstFlrSF"
+names(data)[46] <- "ScndFlrSF"
+names(data)[70] <- "ThreeSsnPorch"
+```
+
+Remove unnecessary variables
+```{r}
+data <- subset(data, select = -c(PID, Order))
+```
+Overall Mean of the SalePrice
+```{r}
+mean <- mean(data$SalePrice)
+mean
+```
+To train the random forest model, a 70/30 ratio split was used for the training and testing datasets. Initially, 1000 trees were fitted, and the model's performance was evaluated based on the highest $R^2$ value and the lowest mean squared error (MSE). From the 1000 trees, the best-performing model was selected for further analysis and use.
+```{r}
+set.seed(1)
+# Split the data into training and testing sets (or use cross-validation)
+set.seed(1)
+target <- "SalePrice"
+y <- data[[target]]
+data1 <- data[, !colnames(data) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+Visualisation of feature importance
+```{r}
+data.rf <- randomForest(train_Y ~ ., train_X, ntree= 100, keep.forest= TRUE, importance = TRUE)
+varImpPlot(data.rf)
+```
+Predicting the SalePrice using the random forest model
+```{r}
+predictions <- round(predict(data.rf, test_X),0)
+```
+
+Combining the predicted and observed sale price for comparison purposes. 
+```{r}
+comb <- data.frame(Pred = predictions, Obs = test_Y)
+print(head(comb))
+```
+
+Calculating the performance measures that will be used for comparison purposes
+```{r}
+sse <- sum((test_Y - predictions)^2)
+ssto <- sum((test_Y - mean(test_Y))^2)
+R2 <- round((1 - (sse / ssto))*100,0)
+# r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+mse <- mean((test_Y - predictions)^2)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2, "%", "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average value of the data is:",perc,"%", "\n")
+```
+
+To visualize the difference between the observed and predicted sale prices, a line plot can be generated. This plot will effectively illustrate the variance between the two variables.
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$Obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$Obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$Pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+To optimize the random forest model, a reduced version will be fitted using the top 40 variables. These variables were carefully selected based on the %incNodePurity metric, which emphasizes the quality of split points in the decision tree. Through experimentation, it was discovered that reducing the number of variables further increased the mean absolute error and decreased the R^2 value. Consequently, the decision was made to utilize the top 40 variables, chosen based on their %incNodePurity scores. This approach was favored over using the %IncMSE variables, as they yielded inferior model performance.
+```{r}
+importance_scores <- importance(data.rf, type=2)
+
+# Convert the matrix to a data frame and include the row names as a variable
+importance_df <- as.data.frame(importance_scores) %>%
+  rownames_to_column(var = "Feature")
+
+# Sort the data frame by importance scores in descending order
+importance_df <- importance_df[order(importance_df$IncNodePurity, decreasing = TRUE), ][1:40,]
+```
+
+```{r}
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create the bar chart
+ggplot(importance_df, aes(y = reorder(Feature, IncNodePurity), x = IncNodePurity)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(y = "Variable Name", x = "IncNodePurity Score", title = "Top 40 Important Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+```
+```{r}
+```
+
+Fitting the reduced random forest model
+
+```{r}
+top40 <- data.frame(Variables = importance_df[1:40,1])
+top40 <- data[, top40$Variables]
+names(top40)
+top40$SalePrice <- data$SalePrice
+```
+```{r}
+set.seed(1)
+# Split the data into training and testing sets (or use cross-validation)
+set.seed(1)
+target <- "SalePrice"
+y <- top40[[target]]
+data1 <- top40[, !colnames(top40) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+```{r}
+top40.rf <- randomForest(train_Y ~ ., train_X, ntree= 50, keep.forest= TRUE, importance = TRUE)
+
+```
+To predict the SalePrice, the random forest model was fitted using the top 40 features selected based on the %IncMSE metric
+```{r}
+predictions <- round(predict(top40.rf, test_X),0)
+```
+Combining the predicted and observed sale price for comparison purposes. 
+```{r}
+comb <- data.frame(Pred = predictions, Obs = test_Y)
+print(head(comb))
+```
+Calculating the performance measures that will be used for comparison purposes
+```{r}
+sse <- sum((test_Y - predictions)^2)
+ssto <- sum((test_Y - mean(test_Y))^2)
+R2 <- round((1 - (sse / ssto))*100,0) 
+# r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+mse <- mean((test_Y - predictions)^2)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2,"%", "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+
+Generating a line plot to visualize the difference between the observed and predicted sale price. 
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$Obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$Obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$Pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+
+2. Support Vector Regression
+
+Load the required package
+```{r}
+library(kernlab)
+library(readxl)
+library(dplyr)
+library(caret)
+library(ggplot2)
+```
+Load data, remove unnecessary variables and then change categorical data into numeric data
+```{r}
+data <- read_excel("Clean_AmesHousing.xlsx")
+```
+
+```{r}
+# Calculate z-scores
+z_scores <- scale(data$SalePrice)
+
+# Set the threshold for outliers
+threshold <- 3
+
+# Remove outliers
+data <- data[abs(z_scores) < threshold, ]
+```
+
+```{r}
+data <- subset(data, select = -c(PID, Order))
+mean <- mean(data$SalePrice)
+
+target_column_index <- 79
+
+features <- data[,-target_column_index]
+
+categorical_var <- names(data %>%
+                           select_if(is.character))
+
+for (col in categorical_var) {
+  data[[col]] <- as.numeric(factor(data[[col]]))
+}
+```
+
+Split the data into training and testing sets 
+```{r}
+set.seed(1)
+target <- "SalePrice"
+y <- data[[target]]
+data1 <- data[, !colnames(data) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+Fit the full SVR model using the ksvm function
+```{r}
+svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
+```
+
+Predictions
+```{r}
+predictions <- predict(svr_model, test_X)
+comb <- data.frame(obs = test_Y, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the model
+```{r}
+r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae/mean)*100,2)
+
+# Print the evaluation metrics
+cat("R-squared:", r_squared,"%", "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+```
+
+Performing feature selection in order fit the reduced support vector regression model
+```{r}
+# Define the 'svmRadial' function for the SVR method
+svmRadial_func <- function(x, y, ...){
+  kernlab::ksvm(x, y, type = "eps-svr", kernel = "rbfdot", kpar = "automatic", ...)
+}
+
+# Create the caretFuncs list with the 'svmRadial' function
+caretFuncs <- list(svmRadial = svmRadial_func)
+
+# Feature Selection using Recursive Feature Elimination (RFE)
+num_features_to_select <- 40  # Set the desired number of features
+ctrl <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
+rfe_results <- rfe(train_X, train_Y,
+                   sizes = num_features_to_select,
+                   rfeControl = ctrl,
+                   method = "svmRadial")
+```
+
+
+```{r}
+top40 <- data.frame(rfe_results$variables[318:357,1:2])
+```
+
+Create the bar chart
+```{r}
+ggplot(top40, aes(y = reorder(var, Overall), x = Overall)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(y = "Variable Name", x = "Overall Score", title = "Top 40 Important Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+```
+
+Create the data for modeling (removing the target variable)
+```{r}
+features <- data[,-target_column_index]
+top40 <- top40$var
+top40 <- data[, top40]
+train_X <- as.matrix(top40[train_indices, ])
+test_X <- as.matrix(top40[-train_indices, ])
+```
+
+Fit the reduced SVR model using the ksvm function
+```{r}
+svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
+```
+
+Predictions
+```{r}
+predictions <- predict(svr_model, as.matrix(test_X))
+comb <- data.frame(obs = test_Y, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the reduced model
+```{r}
+r <- 1 - sum((test_Y - predictions)^2) / sum((test_Y - mean(test_Y))^2)
+r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae/mean)*100,2)
+
+# Print the evaluation metrics
+cat("R-squared:", r_squared,"%",r, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+
+```
+
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+3. XGBoost
+
+Packages
+```{r}
+library(readxl)
+library(xgboost)
+library(caret)
+library(dplyr)
+library(ggplot2)
+```
+
+Loading the pre-processed data dataset inclusive of outliers
+```{r}
+data <- read_excel("Clean_AmesHousing.xlsx")
+```
+
+The model was fitted initially, but the presence of outliers has resulted in an
+increased mean absolute error. Consequently, to address this issue, the model
+will be refitted using a dataset from which the outliers have been removed.
+```{r}
+# Calculate z-scores
+z_scores <- scale(data$SalePrice)
+
+# Set the threshold for outliers
+threshold <- 3
+
+# Remove outliers
+data <- data[abs(z_scores) < threshold, ]
+```
+
+Remove unnecessary variables
+```{r}
+data <- subset(data, select = -c(PID, Order))
+```
+
+XGBoost only allows numerical data. Convert categorical variables in the data
+dataset to numeric format
+```{r}
+ categorical_var <- names(data %>%
+  select_if(is.character))
+
+for (col in categorical_var) {
+  data[[col]] <- as.numeric(factor(data[[col]]))
+}
+```
+
+```{r}
+# Set the target variable
+target <- "SalePrice"
+# Create the target variable
+y <- data[[target]]
+# Create the data for modeling (removing the target variable)
+data <- data[, !colnames(data) %in% target]
+```
+
+```{r}
+mean <- mean(y)
+```
+
+Split the data into training and testing sets
+```{r}
+set.seed(1)
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_data <- data[train_indices, ]
+train_target <- y[train_indices]
+test_data <- data[-train_indices, ]
+test_target <- y[-train_indices]
+```
+
+Train the XGBoost model
+```{r}
+set.seed(1)
+xgb_model <- xgboost(data = as.matrix(train_data),
+                     label = train_target,
+                     nrounds = 1600,  # Number of boosting iterations
+                     objective = "reg:squarederror",  # Regression objective
+                     eta = 0.1,  # Learning rate
+                     max_depth = 2,  # Maximum tree depth
+                     verbose = FALSE,  # Suppress iteration printing
+                     colsample_bytree = 0.8)  # Set seed for reproducibility
+```
+
+Make predictions on the test data
+```{r}
+predictions <- predict(xgb_model, as.matrix(test_data))
+comb <- data.frame(obs = test_target, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the model
+```{r}
+mae <- round(mean(abs(predictions - test_target)),0)
+sse <- sum((test_target - predictions)^2)
+ssto <- sum((test_target - mean(test_target))^2)
+R2 <- round((1 - (sse / ssto))*100,0)
+p <- ncol(test_data)
+n <- nrow(test_data)
+df <- n - p
+mse <- round((sse / df),0)
+rmse <- round(sqrt(mse),0)
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2,"%", "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 1, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+# Set margins to create more space for the legend on the right
+par(mar = c(5, 4, 4, 6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "purple", lwd = 2, xlab = "Index", 
+     ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "pink", lwd = 2)
+
+legend_x <- max(x) + 1
+legend_y <- mean(comb$obs)
+
+# Set xpd to TRUE to allow drawing outside the plot area
+# par(xpd = TRUE)
+# Add a legend just below the x-axis with minimized box size
+
+legend(x = "right", y = legend_y, legend = c("Observed", "Predicted"), 
+       col = c("purple", "pink"), lty = 1, lwd = 2, xpd = TRUE, cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+Fitting a XGBoost model using the top40 variables based on the XGBoost feature 
+Selection
+```{r}
+importance_df <- data.frame(xgb.importance(colnames(train_data), 
+                                           model = xgb_model))
+top40 <- importance_df[1:40,1]
+top40 <- data[, top40]
+names(top40)
+top40$SalePrice <- y
+```
+
+Creating a bar chart to visualise the top40 variables
+```{r}
+new <- importance_df[1:40,1:2]
+new <- new[order(-new$Gain), ]
+ggplot(new, aes(y = reorder(Feature, Gain), x = Gain)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(y = "Variable Name", x = "Gain", title = "Top 40 Important Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+```
+
+Create the data for modeling (removing the target variable)
+```{r}
+top40 <- top40[, !colnames(top40) %in% target]
+```
+
+Split the data into training and testing sets
+```{r}
+set.seed(1)
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_data <- top40[train_indices, ]
+train_target <- y[train_indices]
+test_data <- top40[-train_indices, ]
+test_target <- y[-train_indices]
+```
+
+Train the reduced XGBoost model
+```{r}
+set.seed(1)
+xgb_model <- xgboost(data = as.matrix(train_data),
+                     label = train_target,
+                     nrounds = 1500,  # Number of boosting iterations
+                     objective = "reg:squarederror",  # Regression objective
+                     eta = 0.1,  # Learning rate
+                     max_depth = 2,  # Maximum tree depth
+                     verbose = FALSE,  # Suppress iteration printing
+                     colsample_bytree = 0.8)  # Set seed for reproducibility
+```
+
+Make predictions on the test data
+```{r}
+predictions <- predict(xgb_model, as.matrix(test_data))
+comb <- data.frame(obs = test_target, pred = round(predictions,0))
+print(head(comb))
+```
+
+Evaluate the reduced model
+```{r}
+mae <- round(mean(abs(predictions - test_target)),0)
+sse <- sum((test_target - predictions)^2)
+ssto <- sum((test_target - mean(test_target))^2)
+R2 <- round((1 - (sse / ssto))*100,0)
+r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+p <- ncol(test_data)
+n <- nrow(test_data)
+df <- n - p
+mse <- round((sse / df),0)
+rmse <- round(sqrt(mse),0)
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2,"%",r_squared, "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+
+Visualisation
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index",
+     ylab = "Sale Price", main = "Observed vs Predicted")
+
+# Add the line for predicted values
+lines(x, comb$pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x= "right", y = mean(comb$pred), legend = c("Observed", "Predicted"), 
+       col = c("blue", "red"), lty = 1, lwd = 2, xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```

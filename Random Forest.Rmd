@@ -1,0 +1,239 @@
+---
+title: "Random Forest"
+author: "KN Mnisi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Random forest model that uses all the explanatory variables from the AmesHousing dataset to predict the saling price of a property (House)
+
+Packages needed
+```{r}
+library(readxl)
+library(caret)
+library(randomForest)
+library(tibble)
+```
+Loading the pre-processed AmesHousing dataset inclusive of outliers
+```{r}
+data <- read_excel("Clean_AmesHousing.xlsx")
+```
+The model was fitted initially, but the presence of outliers has resulted in an increased mean absolute error. Consequently, to address this issue, the model will be refitted using a dataset from which the outliers have been removed.
+```{r}
+# Calculate z-scores
+z_scores <- scale(data$SalePrice)
+
+# Set the threshold for outliers
+threshold <- 3
+
+# Remove outliers
+data <- data[abs(z_scores) < threshold, ]
+```
+Modifying the variable names because the randomForest function is sensitive to special characters
+```{r}
+new_names <- gsub(" ", "", names(data))
+names(data) <- new_names
+names(data)[22] <- "YearRemodORAdd"
+names(data)[45] <- "FstFlrSF"
+names(data)[46] <- "ScndFlrSF"
+names(data)[70] <- "ThreeSsnPorch"
+```
+
+Remove unnecessary variables
+```{r}
+data <- subset(data, select = -c(PID, Order))
+```
+Overall Mean of the SalePrice
+```{r}
+mean <- mean(data$SalePrice)
+mean
+```
+To train the random forest model, a 70/30 ratio split was used for the training and testing datasets. Initially, 1000 trees were fitted, and the model's performance was evaluated based on the highest $R^2$ value and the lowest mean squared error (MSE). From the 1000 trees, the best-performing model was selected for further analysis and use.
+```{r}
+set.seed(1)
+# Split the data into training and testing sets (or use cross-validation)
+set.seed(1)
+target <- "SalePrice"
+y <- data[[target]]
+data1 <- data[, !colnames(data) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+Visualisation of feature importance
+```{r}
+data.rf <- randomForest(train_Y ~ ., train_X, ntree= 100, keep.forest= TRUE, importance = TRUE)
+varImpPlot(data.rf)
+```
+Predicting the SalePrice using the random forest model
+```{r}
+predictions <- round(predict(data.rf, test_X),0)
+```
+
+Combining the predicted and observed sale price for comparison purposes. 
+```{r}
+comb <- data.frame(Pred = predictions, Obs = test_Y)
+print(head(comb))
+```
+
+Calculating the performance measures that will be used for comparison purposes
+```{r}
+sse <- sum((test_Y - predictions)^2)
+ssto <- sum((test_Y - mean(test_Y))^2)
+R2 <- round((1 - (sse / ssto))*100,0)
+# r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+mse <- mean((test_Y - predictions)^2)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2, "%", "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average value of the data is:",perc,"%", "\n")
+```
+
+To visualize the difference between the observed and predicted sale prices, a line plot can be generated. This plot will effectively illustrate the variance between the two variables.
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$Obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$Obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Random Forest Observed vs Predicted Prices")
+
+# Add the line for predicted values
+lines(x, comb$Pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+To optimize the random forest model, a reduced version will be fitted using the top 40 variables. These variables were carefully selected based on the %incNodePurity metric, which emphasizes the quality of split points in the decision tree. Through experimentation, it was discovered that reducing the number of variables further increased the mean absolute error and decreased the R^2 value. Consequently, the decision was made to utilize the top 40 variables, chosen based on their %incNodePurity scores. This approach was favored over using the %IncMSE variables, as they yielded inferior model performance.
+```{r}
+importance_scores <- importance(data.rf, type=2)
+
+# Convert the matrix to a data frame and include the row names as a variable
+importance_df <- as.data.frame(importance_scores) %>%
+  rownames_to_column(var = "Feature")
+
+# Sort the data frame by importance scores in descending order
+importance_df <- importance_df[order(importance_df$IncNodePurity, decreasing = TRUE), ][1:40,]
+```
+
+```{r}
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create the bar chart
+ggplot(importance_df, aes(y = reorder(Feature, IncNodePurity), x = IncNodePurity)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(y = "Variable Name", x = "IncNodePurity Score", title = "Top 40 Important Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+```
+
+```{r}
+top40 <- data.frame(Variables = importance_df[1:40,1])
+top40 <- data[, top40$Variables]
+names(top40)
+top40$SalePrice <- data$SalePrice
+```
+```{r}
+set.seed(1)
+# Split the data into training and testing sets (or use cross-validation)
+set.seed(1)
+target <- "SalePrice"
+y <- top40[[target]]
+data1 <- top40[, !colnames(top40) %in% target]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(data1[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(data1[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+```{r}
+top40.rf <- randomForest(train_Y ~ ., train_X, ntree= 50, keep.forest= TRUE, importance = TRUE)
+
+```
+To predict the SalePrice, the random forest model was fitted using the top 40 features selected based on the %IncMSE metric
+```{r}
+predictions <- round(predict(top40.rf, test_X),0)
+```
+Combining the predicted and observed sale price for comparison purposes. 
+```{r}
+comb <- data.frame(Pred = predictions, Obs = test_Y)
+print(head(comb))
+```
+Calculating the performance measures that will be used for comparison purposes
+```{r}
+sse <- sum((test_Y - predictions)^2)
+ssto <- sum((test_Y - mean(test_Y))^2)
+R2 <- round((1 - (sse / ssto))*100,0) 
+# r_squared <- round(cor(predictions, test_Y)^2 *100,0)
+mse <- mean((test_Y - predictions)^2)
+rmse <- sqrt(mean((test_Y - predictions)^2))
+mae <- mean(abs(test_Y - predictions))
+perc <- round((mae / mean)*100,2)
+
+cat("The Coeficient of Determination is: ", R2,"%", "\n")
+cat("The Mean Squared Error is: ", mse, "\n")
+cat("The Root Mean Squared Error is: ", rmse, "\n")
+cat("The Mean Absolute Error is: ", mae, "\n")
+cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
+```
+
+Generating a line plot to visualize the difference between the observed and predicted sale price. 
+```{r}
+# Create a sequence of numbers for the x-axis
+x <- seq_along(comb$Obs)
+# Disable scientific notation on the y-axis
+options(scipen = 999)
+par(las = 2, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+
+par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
+
+# Plot the line graph
+plot(x, comb$Obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Random Forest Observed vs Predicted Prices")
+
+# Add the line for predicted values
+lines(x, comb$Pred, col = "red", lwd = 2)
+
+# Add a legend
+legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,435 @@
+---
+title: 'Exploring the Ames Housing Dataset'
+author: "Kwanele Mnisi"
+date: "10 May 2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(doBy)
+library(dplyr)
+library(readr)
+library(corrplot)
+library(RColorBrewer)
+library(mice)
+```
+
+
+```{r}
+AmesHousing <- read_csv("AmesHousing.csv")
+View(AmesHousing)
+```
+
+Calculating the number of NA values and the percentage of NA values in each column 
+```{r}
+Total_Na_Values <- colSums(is.na(AmesHousing))
+Percentage <- floor(Total_Na_Values / nrow(AmesHousing) * 100)
+NA_Counts <- cbind.data.frame(Total_Na_Values, Percentage)
+```
+
+Calculating the total number of variables that has NA values
+```{r}
+(nonzero_rows <- sum(rowSums(NA_Counts != 0) > 0))
+```
+There are 27 variables containing NA values namely (Sorted in descending order):
+```{r}
+nonzero_observations <- NA_Counts[rowSums(NA_Counts != 0) > 0, ]
+(sorted_observations <- nonzero_observations[order(-nonzero_observations$Total_Na_Values), ])
+```
+However, there are numerous ways to deal with NA observations in a dataset
+1. Removing missing values: You can remove rows or columns with missing values from
+   the dataset using the na.omit() or complete.cases() functions, respectively.
+2. Replacing missing values: You can replace missing values with a value based on the 
+   type of data. For example, you can replace missing numeric values with the mean or 
+   median of the column, or replace missing categorical values with the mode etc.
+3. Using imputation techniques: You can use more advanced imputation techniques to fill 
+   in missing values. There are several R packages that provide imputation functions, 
+   such as mice, missForest, and Amelia. 
+   
+Within the Ames dataset, there are five variables that contain a substantial number of missing values. These variables and their corresponding percentages of missing values are as follows: Alley (99%), Fire Place Qu (96%), Pool QC (93%), Fence (80%), Misc Feature (48%), and Lot Frontage (16%). Notably, the first four variables can be substituted with descriptive categories to indicate the absence of certain features. Specifically, "no alley access" (NAA), "no fireplace" (NFP), "no pool" (NP), and "no miscellaneous features" (NMF) respectively. However, the lot frontage variable cannot be replaced using such descriptive categories as there is no available information to determine the meaning behind the missing values. As a result, the NA values in this variable can be omited. 
+
+```{r}
+AmesHousing$Alley <- replace(AmesHousing$Alley, is.na(AmesHousing$Alley), "NAA")
+AmesHousing$`Fireplace Qu` <- replace(AmesHousing$`Fireplace Qu`, 
+                                      is.na(AmesHousing$`Fireplace Qu`), "NFP")
+AmesHousing$`Pool QC` <- replace(AmesHousing$`Pool QC`, is.na(AmesHousing$`Pool QC`), "NP")
+AmesHousing$Fence <- replace(AmesHousing$Fence, is.na(AmesHousing$Fence), "NF")
+AmesHousing$`Misc Feature` <- replace(AmesHousing$`Misc Feature`, 
+                                      is.na(AmesHousing$`Misc Feature`), "NMF")
+AmesHousing
+```
+
+The presence of NA values in the garage-related variables, namely garage type (nominal), garage cond (ordinal), garage qual (nominal), garage finish (nominal), and garage yr blt (discrete), indicates the absence of a garage in the respective houses. It is worth noting that these variables collectively exhibit a consistent occurrence rate of 5% (157 values for every variable) for NA values. To address the missing values in the nominal and ordinal variables, a suitable approach is to substitute the NA values with the "no garage" (NG) category. This maintains consistency in the dataset and facilitates further analysis and interpretation. However, given that the "garage yr blt" variable represents discrete construction years, it is not advisable to replace its NA values with "no garage" or any other specific value. Omitting the NA values in this variable would be a more appropriate course of action. Consequently, by omitting the NA values in the "garage yr blt" variable, the NA values in the remaining four garage-related variables will also be eliminated.
+
+Among the basement-related variables in the dataset, several variables exhibit a consistent occurrence of 2% NA values. These variables include "bsmt exposure" (with 83 NA values), "bsmt qual" (with 80 NA values), "bsmt cond" (with 80 NA values), "bsmtfin type 1" (with 80 NA values), and "bsmtfin type 2" (with 81 NA values). It is worth noting that the number of NA values in each variable is not uniform, making it unwise to assume and replace all NA values with a generic category such as "no basement." Given the relatively insignificant percentage of NA values in these variables, it is reasonable to omit the NA values during analysis. This omission would lead to the elimination of the NA values in other basement-related variables, namely "bsmt full bath," "bsmt half bath," "bsmtfin sf 1," "bsmtfin sf 2," "bsmt unf sf," and "total bsmt sf."
+
+The "Mas Vnr Type" and "Mas Vnr Area" variables in the dataset have two missing values each, signifying the absence or unavailability of information regarding the type or area measurement of the masonry veneer for certain properties. Therefore, it is appropriate to remove these missing values from the dataset. Similarly, the "Electrical" variable has one missing value, suggesting missing or unavailable information about the type of electrical system in a specific house. This missing value can also be omitted from the analysis. Additionally, the "Garage Cars" and "Garage Area" variables each have one missing value, representing missing information related to the number of cars the garage can accommodate and the area of the garage, respectively. Omitting these missing values ensures data integrity and enables analysis based on complete and reliable information for the respective variables.
+
+In summary, all other NA values present in the dataset besides the NA values for the variables: "Alley", "Fire Place Qu", "Pool QC", "Fence" and "Misc Feature", will be ommited. This will result to the dataset having 
+
+The above adjustments resulted in the dataset having 2218 observations instead of the initial 2930 observations, meaning 712 (24.3%) observations were ommited. 
+```{r}
+```
+Identify observations with a non-missing value in "Garage Type" but missing values in garage-related variables
+
+```{r}
+AmesHousing <- subset(AmesHousing, select = -`Garage Yr Blt`)
+```
+
+```{r}
+AmesHousing$`Has Garage` <- NA
+AmesHousing$`Has Garage` <- ifelse(AmesHousing$`Garage Area` == 0, 0, 1)
+```
+
+```{r}
+names(AmesHousing)[5] <- "LotFrontage"
+names(AmesHousing)[6] <- "LotArea"
+names(AmesHousing)[9] <- "LotShape"
+names(AmesHousing)[4] <- "MSZoning"
+names(AmesHousing)[12] <-"LotConfig"
+
+```
+```{r}
+vars <- c("LotFrontage", "LotArea", "LotShape", "Neighborhood", "MSZoning", "Street", "LotConfig")
+dataset <- AmesHousing[, vars]
+imp_model <- mice(dataset, method = "pmm", m = 1, maxit = 50)
+imputed_data <- complete(imp_model, action = "long", include = TRUE)
+AmesHousing$LotFrontage <- imputed_data$LotFrontage[2931:5860]
+AmesHousing$`Lot Frontage` <- AmesHousing$LotFrontage
+```
+```{r}
+names(AmesHousing)[5] <- "Lot Frontage"
+names(AmesHousing)[6] <- "Lot Area"
+names(AmesHousing)[9] <- "Lot Shape"
+names(AmesHousing)[4] <- "MS Zoning"
+names(AmesHousing)[12] <-"Lot Config"
+```
+
+Assign "NG" to variables when `Has Garage` is 0
+```{r}
+AmesHousing$`Garage Type`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Cond`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Finish`[AmesHousing$`Has Garage` == 0] <- "NG"
+AmesHousing$`Garage Qual`[AmesHousing$`Has Garage` == 0] <- "NG"
+```
+Assing "NB" to variables when `Total Bsmt SF` is 0
+```{r}
+AmesHousing$`Bsmt Exposure`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`Bsmt Cond`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`Bsmt Qual`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`BsmtFin Type 1`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+AmesHousing$`BsmtFin Type 2`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
+```
+
+```{r}
+AmesHousing <- na.omit(AmesHousing)
+AmesHousing <- AmesHousing[,1:82]
+nrow(AmesHousing)
+```
+Checking for outliers in the SalePrice variable
+
+```{r}
+options(scipen = 999)
+par(mar = c(5, 4, 4, 2) + 0.4, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+par(las = 1, yaxs = "i")
+boxplot(AmesHousing$SalePrice,
+        main = "Box Plot of Sale Price",
+        ylab = "Sale Price",
+        ylim = c(0,755000))
+```
+
+The analysis of the Box plot for the Sale Price variable reveals a notable right-skewness in its distribution. Specifically, the plot demonstrates a positively skewed pattern where the majority of data points are concentrated towards lower values, accompanied by a pronounced elongated right tail. This characteristic signifies the existence of outliers or higher values that substantially deviate from the general trend observed in the dataset.
+Calculate the z-scores in order to identify the outliers. 
+```{r}
+z_scores <- scale(AmesHousing$SalePrice)
+# Identify outliers
+outliers <- which(abs(z_scores) > 3)
+(outliers <- AmesHousing[outliers, ])
+
+```
+
+Based on the z-scores approach, a thorough analysis reveals the presence of 33 outliers within the Sale Price variable. While outliers often require careful consideration and treatment in data cleaning processes, this particular study refrains from addressing them during the initial dataset cleaning stage. This decision stems from the fact that the proposed algorithms employed in the study possess the ability to handle outliers, and furthermore, there exists a possibility that these outliers may hold valuable insights or unique characteristics worth exploring further.
+```{r}
+```
+
+Correlation Plot for all numeric variables in the Ames Dataset, excluding the "Order" Variable
+```{r}
+numeric_cols <- AmesHousing[sapply(AmesHousing, is.numeric)][,2:37]
+cor_matrix <- cor(numeric_cols)
+corrplot(cor_matrix, method = "color",tl.cex = 0.5, col = colorRampPalette(brewer.pal(11, "RdYlBu"))(100))
+# corrplot(cor_matrix, method = "color", tl.cex = 0.5, col = c("#FF0000", "#00FF00", "#0000FF"))
+
+```
+Upon examining the correlation plot, a notable and robust positive correlation is evident between the "Overall Quality" variable and the Sale Price of houses. This observation indicates that higher overall quality ratings are associated with higher sale prices in a scientifically significant manner... (to be continued)
+
+```{r}
+```
+
+Exploring al the variables in the dataset
+
+```{r}
+```
+1. "MS Zoning" - The variable represents the zoning classification assigned to properties. It indicates the zoning category or designation for each property, which defines the permitted land use and regulations imposed by the local government . The unique values are:
+```{r}
+(responses <- data.frame(table(AmesHousing$`MS Zoning`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "MS Zoning", ylab = "Frequency",
+        col = 'blue', main = "Zoning Classification Assigned to Properties")
+
+```
+2. "Street" - The variable represents the type of road access to the property. It indicates whether the property has a gravel or paved road access.
+```{r}
+(responses <- data.frame(table(AmesHousing$Street)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Streets", ylab = "Frequency", 
+        col = 'red', main = "Type of Road Access to Property")
+```
+3. "Alley" - The variable represents the type of alley access to the property. It indicates whether the property has an alley access and, if so, the surface type of that alley.
+
+```{r}
+(responses <- data.frame(table(AmesHousing$Alley)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Alley", ylab = "Frequency", 
+        col = 'pink', main = "Alley  Acess to Property")
+
+```
+4. "Lot Shape" - The variable represents the general shape of a property. It describes the shape of the lot on which the house is situated.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Lot Shape`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Lot Shape", ylab = "Frequency", 
+        col = 'green', main = "General Shape of Property")
+ 
+```
+5. "Land Contour" - variable describes the flatness of the property on which the house is located. It provides information about the contour or shape of the land.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Land Contour`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Land Contour", ylab = "Frequency", 
+        col = 'yellow', main = "The Flatness/Shape of the land on which the house is located")
+```
+6. "Utilities" - The variable describes the type of utilities available in the property. It provides information about the types of services that are provided to the house.
+```{r}
+(responses <- data.frame(table(AmesHousing$Utilities)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Utilities", ylab = "Frequency", 
+        col = 'purple', main = "Type of Utilities available in the property")
+```
+7. "Lot Config" - The variable describes the configuration of the lot on which the house is located. It provides information about the shape and arrangement of the lot.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Lot Config`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Lot Config", ylab = "Frequency", 
+        col = 'orange', main = "Configuration of the lot")
+```
+8. "Neighborhood" - The variable represents the physical locations within the city limits of Ames, Iowa, where the properties are located. It provides information about the neighborhood or area in which each house is situated.
+```{r}
+(responses <- data.frame(table(AmesHousing$Neighborhood)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las= 2, ylab = "Frequency", 
+        col = 'limegreen', main = "Physical location withing the city (Neighborhood)")
+```
+9. "Condition 1" - The variable represents the proximity of a property to various conditions. It provides information about the proximity of the property to different features or factors that may affect its desirability or value. 
+
+```{r}
+(responses <- data.frame(table(AmesHousing$`Condition 1`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las=2, ylab = "Frequency", 
+col = 'skyblue', main = " The Proximity of a Property to Various Conditions
+        (Condition 1)")
+```
+10. "Condition 2" - The variable provides information about the proximity of a property to various conditions (if more than one condition is present). It is similar to the Condition1 variable but represents additional conditions that may be applicable to the property
+
+```{r}
+(responses <- data.frame(table(AmesHousing$`Condition 2`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Condition 2", ylab = "Frequency", 
+        col = 'brown', main = "Additional Conditions that may be Applicable to the Property")
+```
+11. "Bldg Type"- The variable represents the type of dwelling present on a property. It indicates the structural style or configuration of the building
+```{r}
+(responses <- data.frame(table(AmesHousing$`Bldg Type`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Building Type", ylab = "Frequency", 
+        col = 'maroon', main = "Type of Dwelling Present on Property")
+```
+12. "House Style" - represents the style or design of a dwelling. It describes the overall architectural style of the house
+```{r}
+(responses <- data.frame(table(AmesHousing$`House Style`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las=2, ylab = "Frequency", 
+        col = 'darkgreen', main = "Architectural Style of the House (House Style)")
+```
+13. "Roof Style" - The variable represents the type or style of the roof of a dwelling. It describes the shape and design of the roof.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Roof Style`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Roof Style", ylab = "Frequency", 
+        col = 'violet', main = "The Shape and Design of the Roof")
+```
+14. "Roof Matl" - The variable represents the material used for the roof of a dwelling. It describes the specific material composition of the roof.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Roof Matl`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las=2, ylab = "Frequency", 
+        col = 'lightyellow', main = "Material used for the Roof (Roof Matl) ")
+```
+15. "Exterior 1st" - The variable represents the exterior covering material of the house. It describes the primary exterior material used on the first side of the house (typically the front side).
+```{r}
+(responses <- data.frame(table(AmesHousing$`Exterior 1st`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las= 2, ylab = "Frequency", 
+col = 'darkblue', main = "The Primary Exterior Material used on the First Side of the House 
+        (Typically the Front Side) (Exterior 1st)")
+```
+16. " Exterior 2nd" - The variable represents the exterior covering material of the house, specifically for the second side of the house (typically the back side). It describes the secondary exterior material used on the house.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Exterior 2nd`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las=2,  ylab = "Frequency", 
+col = 'darkred', main = "The Exterior Covering Material of the House, Specifically
+        for the Second Side of the House (Typically the Back Side) (Exterior 2nd)")
+```
+17. "Mas Vnr Type" -  The variable represents the type of masonry veneer used on the exterior of the house. It describes the specific material or composition of the masonry veneer.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Mas Vnr Type`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Mas Vnr Area", ylab = "Frequency", 
+        col = 'black', main = "Masonry Venner used in the Exterior of the House")
+```
+18. "Foundation" - The variable represents the type of foundation on which a house is built. It describes the underlying structure or base that supports the entire house. 
+```{r}
+(responses <- data.frame(table(AmesHousing$Foundation)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Foundation", ylab = "Frequency", 
+        col = 'darkorange', main = "Type of Foundation on which the House is Built")
+```
+19. "Heating" - The variable represents the type of heating system present in a house. It describes the method or system used to provide heat to the interior spaces.
+```{r}
+(responses <- data.frame(table(AmesHousing$Heating)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Heating", ylab = "Frequency", 
+        col = 'green', main = "Type of Heating System Present in the House")
+```
+20. "Central Air" - The variable represents whether a house has central air conditioning or not. It indicates the presence or absence of a central cooling system that provides air conditioning to the entire house. 
+```{r}
+(responses <- data.frame(table(AmesHousing$`Central Air`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Cental Air", ylab = "Frequency", 
+        col = 'navy', main = "Central Air Conditioning")
+```
+21. "Electrical" - The variable represents the electrical system or capacity present in a house. It describes the type and capacity of the electrical service available in the property.
+```{r}
+(responses <- data.frame(table(AmesHousing$Electrical)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Electrical", ylab = "Frequency", 
+        col = 'red', main = "Electrical System or Capacity Present in the House")
+```
+22. "Garage Type" - The variable represents the type of garage present in a house. It describes the structural design or configuration of the garage.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Garage Type`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Garage Type", ylab = "Frequency", 
+        col = 'pink', main = "Type of Garage Present in the House")
+```
+23. "Misc Feature" - The variable represents additional miscellaneous features present in a house. It describes any additional structures or amenities that are not covered by other variables in the dataset. 
+```{r}
+(responses <- data.frame(table(AmesHousing$`Misc Feature`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Misc Feature", ylab = "Frequency", 
+        col = 'yellow', main = "Additional Miscellaneous Features Present in the House")
+```
+24. "Sale Type" - The variable represents the type of sale that occurred for a particular property. It describes the nature or circumstances of the property transaction.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Sale Type`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "", las=2,  ylab = "Frequency", 
+col = 'purple', main = "Nature or Circumstance of the Property Transaction
+        (Sale Type)")
+```
+25. "Sale Condition" - The variable represents the condition of the sale for a particular property. It describes the circumstances or terms under which the property was sold.
+```{r}
+(responses <- data.frame(table(AmesHousing$`Sale Condition`)))
+barplot(responses$Freq, names.arg = responses$Var1, xlab = "Sale Condition", ylab = "Frequency", 
+        col = 'orange', main = "The Condition of the Sale for a Particular Property")
+```
+... (to be continued)
+
+```{r}
+```
+
+Checking what influence does the lot area has on the sale price of the houses
+
+```{r}
+x <- AmesHousing$`Lot Area` 
+y <- AmesHousing$SalePrice
+options(scipen = 999)
+par(mar = c(5, 4, 4, 2) + 0.4, # Adjust margin
+    cex.axis = 0.6) # Adjust axis label size
+par(las = 1, yaxs = "i")
+plot(x, y, type="p", xlab="Lot Area", ylab="Selling Price", col='purple',
+     main="The relationship between Lot Area and Sale Price")
+```
+There seem to be a directly proportional relationship between the Lot Area and the Selling price. However, the relationship is only up to a certain point.   
+```{r}
+```
+Checking what is the lot area when the house price was the highest. 
+```{r}
+LAnSP <- data.frame(lot_area <- AmesHousing$`Lot Area`,
+                    sale_price <- AmesHousing$SalePrice)
+max_index <- which.max(LAnSP$sale_price)
+Max <- LAnSP[max_index,]
+Max
+```
+The sale price of a house increases as the lot area increase, until the lot area reaches
+21 535 square ft with a sale price of $755 000. The sale price then deceases as the lot
+size increase. 
+```{r}
+```
+
+Calculating the mean sale price for every year. 
+```{r}
+Year_Sold <- AmesHousing$`Yr Sold`
+Sale_Price <- AmesHousing$SalePrice
+data <- data.frame(Year_Sold, Sale_Price)
+means <- aggregate(Sale_Price ~ Year_Sold, AmesHousing, mean)
+means
+```
+The highest mean Sale Price was observed in 2007 while the lowest was observed in 2010.
+This pattern could be explained by the 2008 global financial crisis, which had a 
+significant impact on the housing market in many countries. The crisis led to a decrease in demand for housing and a decrease in home values.Iowa was one of the states that was
+hit hard by the crisis, with many homeowners facing foreclosure and declining home values.
+This could have led to lower sale prices in Ames in 2010.
+```{r}
+```
+
+Investigating which months were most houses sold and which one did they sell the least
+number of houses. 
+```{r}
+num_houses <- table(AmesHousing$`Mo Sold`)
+num_houses
+```
+This shows that the majority of houses were sold in the month of June, followed by July, 
+while the fewest number of houses were sold in December and January.This may be due to the presence of Iowa State University in Ames could contribute to a peak in home sales during the summer months, as students and faculty may want to move before the start of the new academic year. Additionally, the warmer weather during the summer months may make it more appealing for people to search for and move into new homes.On the other hand, the holiday season may have a greater impact on home sales in Ames if many residents celebrate the holidays and choose to focus on holiday activities rather than buying or selling a home. The weather in Ames during December and January may also be a factor, as snow and ice could make it more difficult to move.
+
+```{r}
+```
+Checking which neighborhood has an average of more expensive house
+```{r}
+Neighborhood <- AmesHousing$Neighborhood
+Sale_Price <- AmesHousing$SalePrice
+data <- data.frame(Neighborhood, Sale_Price)
+means <- aggregate(Sale_Price ~ Neighborhood, AmesHousing, mean)
+means
+# I want to order in order to know which is the cheapest and most expensive neighborhood
+max <- which.max(means$Sale_Price)
+max <- means[max,]
+print(max)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+missing_garage_obs <- AmesHousing[!is.na(AmesHousing$`Garage Type`) & is.na(AmesHousing$`Garage Cond`) & is.na(AmesHousing$`Garage Finish`) & is.na(AmesHousing$`Garage Qual`), ]
+```
+Calculate the mean of "Garage Yr Blt" where "Garage Type" is "detchd"
+Replace missing values with the mean value
+```{r}
+mean_garage_year <- mean(AmesHousing$`Garage Yr Blt`[AmesHousing$`Garage Type` == "detchd"], na.rm = TRUE)
+AmesHousing$`Garage Yr Blt`[is.na(AmesHousing$`Garage Yr Blt`) & AmesHousing$`Garage Type` == "detchd"] <- mean_garage_year
+```
