@@ -16,15 +16,17 @@ library(readr)
 library(corrplot)
 library(RColorBrewer)
 library(mice)
+library(FactoMineR)
+library(factoextra)
 ```
 
 Importing the Ames Housing dataset.
 ```{r}
 AmesHousing <- read_csv("AmesHousing.csv")
 ```
-_______________________________________________________________________________________________________________________________________________________________________
+_________________________________________________________________________________________________________
 SECTION 1: DATA ENGINEERING
-_______________________________________________________________________________________________________________________________________________________________________
+_________________________________________________________________________________________________________
 
 Calculating the number of NA (null) values and the percentage of NA values in each column. 
 ```{r}
@@ -36,18 +38,18 @@ NA_Counts <- cbind.data.frame(Total_Na_Values, Percentage)
 Calculating the total number of variables that has NA values. 
 ```{r}
 nonzero_rows <- sum(rowSums(NA_Counts != 0) > 0)
-cat(:There are", nonzero_rows, "variables containing NA values namely (Sorted in descending order):","\n")
+cat("There are", nonzero_rows, "variables containing NA values namely (Sorted in descending order):","\n")
 nonzero_observations <- NA_Counts[rowSums(NA_Counts != 0) > 0, ]
 (sorted_observations <- nonzero_observations[order(-nonzero_observations$Total_Na_Values), ])
 ```
 
 There are numerous ways to deal with NA observations in a dataset.
-1. Removing missing values: You can remove rows or columns with missing values from
+*  Removing missing values: You can remove rows or columns with missing values from
    the dataset using the na.omit() or complete.cases() functions, respectively.
-2. Replacing missing values: You can replace missing values with a value based on the 
+*  Replacing missing values: You can replace missing values with a value based on the 
    type of data. For example, you can replace missing numeric values with the mean or 
    median of the column, or replace missing categorical values with the mode etc.
-3. Using imputation techniques: You can use more advanced imputation techniques to fill 
+*  Using imputation techniques: You can use more advanced imputation techniques to fill 
    in missing values. There are several R packages that provide imputation functions, 
    such as mice, missForest, and Amelia. 
    
@@ -122,66 +124,76 @@ All other NA values present in the dataset, including the variables already disc
 ```{r}
 AmesHousing <- na.omit(AmesHousing)
 ```
-Now this is the cleaned dataset that will be used for the study.
+Now this is the cleaned dataset that will be used for the rest of the study.
 
-_____________________________________________________________________________________________________________________________________________________________________________________________
+______________________________________________________________________________________________________________
 SECTION 2: DATA EXPLORATION
-_____________________________________________________________________________________________________________________________________________________________________________________________
+______________________________________________________________________________________________________________
 
-Checking for outliers in the SalePrice variable
+Visualising a Box Plot.
 ```{r}
 options(scipen = 999)
-par(mar = c(5, 4, 4, 2) + 0.4, # Adjust margin
-    cex.axis = 0.6) # Adjust axis label size
+par(mar = c(5, 4, 4, 2)
+    cex.axis = 0.6)
 par(las = 1, yaxs = "i")
 boxplot(AmesHousing$SalePrice,
         main = "Box Plot of Sale Price",
         ylab = "Sale Price",
         ylim = c(0,755000))
 ```
+The box plot provides valuable insights into the distribution of house sale prices. It is apparent that the boxplot is skewed to the right. This skewness implies that the Ames housing market comprises a considerable number of moderately priced houses, while a smaller proportion of the market contains high-priced properties. The median sale price of $160 000 indicates the middle value, with half of the houses sold below this price and the other half above it. Moreover, the interquartile range (IQR) between $129 000 (1st Quartile, Q1) and $213,000 (3rd Quartile, Q3) represents the middle 50% of the data, offering an understanding of the typical range of sale prices. However, there are potential outliers, with the minimum sale price at $12 789 and the maximum at $755 000, indicating a few houses with exceptionally low or high sale prices compared to the majority of the data.
 
-The analysis of the Box plot for the Sale Price variable reveals a notable right-skewness in its distribution. Specifically, the plot demonstrates a positively skewed pattern where the majority of data points are concentrated towards lower values, accompanied by a pronounced elongated right tail. This characteristic signifies the existence of outliers or higher values that substantially deviate from the general trend observed in the dataset.
-Calculate the z-scores in order to identify the outliers.
-
+Extracting the outliers of the Sale Price variable from dataset  by using the z-scores approach.
 ```{r}
 z_scores <- scale(AmesHousing$SalePrice)
-# Identify outliers
 outliers <- which(abs(z_scores) > 3)
-(outliers <- AmesHousing[outliers, ])
+outliers <- AmesHousing[outliers, ]
 ```
+Based on the z-scores approach, a thorough analysis reveals the presence of 44 outliers within the Sale Price variable. While outliers often require careful consideration and treatment in data cleaning processes, this particular study refrains from addressing them during the initial dataset cleaning stage. This decision stems from the fact that the proposed algorithms employed in the study possess the ability to handle outliers, and furthermore, there exists a possibility that these outliers may hold valuable insights or unique characteristics worth exploring further.
 
-Based on the z-scores approach, a thorough analysis reveals the presence of 33 outliers within the Sale Price variable. While outliers often require careful consideration and treatment in data cleaning processes, this particular study refrains from addressing them during the initial dataset cleaning stage. This decision stems from the fact that the proposed algorithms employed in the study possess the ability to handle outliers, and furthermore, there exists a possibility that these outliers may hold valuable insights or unique characteristics worth exploring further.
+Correlation Plot for all numeric variables in the Ames Dataset, excluding the "Order" Variable which is column 1.
 ```{r}
-```
-
-Correlation Plot for all numeric variables in the Ames Dataset, excluding the "Order" Variable
-```{r}
-numeric_cols <- AmesHousing[sapply(AmesHousing, is.numeric)][,2:37]
+numeric_cols <- AmesHousing[sapply(AmesHousing, is.numeric)][,-1]
 cor_matrix <- cor(numeric_cols)
 corrplot(cor_matrix, method = "color",tl.cex = 0.5, col = colorRampPalette(brewer.pal(11, "RdYlBu"))(100))
-# corrplot(cor_matrix, method = "color", tl.cex = 0.5, col = c("#FF0000", "#00FF00", "#0000FF"))
-
 ```
-Upon examining the correlation plot, a notable and robust positive correlation is evident between the "Overall Quality" variable and the Sale Price of houses. This observation indicates that higher overall quality ratings are associated with higher sale prices in a scientifically significant manner... (to be continued)
-```{r}
-```
+The correlation heatmap reveals crucial insights into the dataset, showing the correlations between variables. Notably, there is a substantial positive correlation of 81.36% between Total Bsmt SF and 1st Flr SF, indicating that as the total basement area increases, so does the area on the first floor. Additionally, the correlation of 80.75% between TotRms AbvGrd and Gr Liv Area suggests that houses with more rooms above ground level tend to have larger ground living areas. Concerning the target variable, SalePrice, it exhibits a strong correlation with two key features. First, the Overall Qual) shows a correlation of 79.93%, implying that higher overall quality in a house is associated with higher sale prices. Second, the Gr Liv Area demonstrates a correlation of 70.86%, indicating that homes with larger ground living areas tend to achieve higher selling prices.
 
-Calculating the mean sale price for every year. 
+Calculating and analysing the mean sale price for every year. 
 ```{r}
 Year_Sold <- AmesHousing$`Yr Sold`
 Sale_Price <- AmesHousing$SalePrice
 data <- data.frame(Year_Sold, Sale_Price)
-means <- aggregate(Sale_Price ~ Year_Sold, AmesHousing, mean)
-means
+(means <- aggregate(Sale_Price ~ Year_Sold, AmesHousing, mean))
 ```
-The highest mean Sale Price was observed in 2007 while the lowest was observed in 2010.
-This pattern could be explained by the 2008 global financial crisis, which had a 
-significant impact on the housing market in many countries. The crisis led to a decrease in demand for housing and a decrease in home values.Iowa was one of the states that was
-hit hard by the crisis, with many homeowners facing foreclosure and declining home values.
-This could have led to lower sale prices in Ames in 2010.
+The mean sale prices of houses in the Ames housing market from 2006 to 2010 showns an intriguing trend. The market experienced steady growth from 2006 to 2007, with the average sale price increasing from $180 879.60 to $184 728.70. This upswing can be attributed to a growing economy, increased housing demand, and possible inflationary pressures. However, in 2008, the average sale price slightly decreased to $178 587.30, which might be linked to the onset of the global financial crisis during that period, leading to a slowdown in the housing market. Despite the challenging financial crisis, the market exhibited resilience, rebounding to a mean sale price of $181 026.80 in 2009 and maintaining relative stability. In 2010, there was a more significant drop in the mean sale price to $172 323.80, which could be associated with the lingering effects of the financial crisis and the slower recovery process.
+
+Checking how many variables will be optimal to use for our reduced model so that at least 80% of the variation in the response variable is explained. 
+a) Creating a temporal dataset which is a duplicate of the AmesHousing dataset and transforming all variables to be numeric variables as it is required by the Principal Component Analysis (PCA) in order to determine the number of components (features) that explain at least 80% of the variation in the dataset
 ```{r}
+pacdata <- AmesHousing
+categorical_var <- names(pacdata %>%
+                           select_if(is.character))
+for (col in categorical_var) {
+  pacdata[[col]] <- as.numeric(factor(pacdata[[col]]))
+}
 ```
-Machine Learning Techniques used: 
+b) Perform PCA. The PCA (Principal Component Analysis) technique is used to reduce the dimensionality of a dataset while retaining at least a percentage (80% in this case) of its variation. It accomplishes this by transforming the original variables into a set of orthogonal principal components. The results, including principal components, eigenvalues, and variable loadings, are stored in `pca_result`, and graphical output is suppressed with `graph = FALSE` in the function call.
+```{r}
+pca_result <- PCA(AmesHousing[,!colnames(AmesHousing) %in% "SalePrice"] , graph = FALSE)
+```
+c) Determining the number of components to retain based on explained variance Finding the number of components that explain at least 80% of the variance
+```{r}
+explained_variance <- pca_result$eig[, 2]  # Percentage of variance explained
+cumulative_variance <- cumsum(explained_variance)
+optimal_num_variables <- which(cumulative_variance >= 80)[1]
+cat(optimal_num_variables, "must be used for the reduced models in order to explain atleast 80% of the variance", "\n")
+```
+It has been ascertained by the PAC technique that utilizing 40 variables will yield the desired results, establishing it as the preferred number of features to be used for the reduced models.
+
+______________________________________________________________________________________________________________________
+SECTION 3: MACHINE LEARNING TECHNIQUES (ALGORITHMS)
+______________________________________________________________________________________________________________________
 
 1. Random Forest
 
