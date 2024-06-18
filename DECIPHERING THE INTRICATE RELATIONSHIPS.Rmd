@@ -18,29 +18,30 @@ library(RColorBrewer)
 library(mice)
 ```
 
-Original Dataset
+Importing the Ames Housing dataset.
 ```{r}
 AmesHousing <- read_csv("AmesHousing.csv")
-View(AmesHousing)
 ```
+_______________________________________________________________________________________________________________________________________________________________________
+SECTION 1: DATA ENGINEERING
+_______________________________________________________________________________________________________________________________________________________________________
 
-Calculating the number of NA values and the percentage of NA values in each column 
+Calculating the number of NA (null) values and the percentage of NA values in each column. 
 ```{r}
 Total_Na_Values <- colSums(is.na(AmesHousing))
 Percentage <- floor(Total_Na_Values / nrow(AmesHousing) * 100)
 NA_Counts <- cbind.data.frame(Total_Na_Values, Percentage)
 ```
 
-Calculating the total number of variables that has NA values
+Calculating the total number of variables that has NA values. 
 ```{r}
-(nonzero_rows <- sum(rowSums(NA_Counts != 0) > 0))
-```
-There are 27 variables containing NA values namely (Sorted in descending order):
-```{r}
+nonzero_rows <- sum(rowSums(NA_Counts != 0) > 0)
+cat(:There are", nonzero_rows, "variables containing NA values namely (Sorted in descending order):","\n")
 nonzero_observations <- NA_Counts[rowSums(NA_Counts != 0) > 0, ]
 (sorted_observations <- nonzero_observations[order(-nonzero_observations$Total_Na_Values), ])
 ```
-However, there are numerous ways to deal with NA observations in a dataset
+
+There are numerous ways to deal with NA observations in a dataset.
 1. Removing missing values: You can remove rows or columns with missing values from
    the dataset using the na.omit() or complete.cases() functions, respectively.
 2. Replacing missing values: You can replace missing values with a value based on the 
@@ -50,8 +51,7 @@ However, there are numerous ways to deal with NA observations in a dataset
    in missing values. There are several R packages that provide imputation functions, 
    such as mice, missForest, and Amelia. 
    
-Within the Ames dataset, there are five variables that contain a substantial number of missing values. These variables and their corresponding percentages of missing values are as follows: Alley (99%), Fire Place Qu (96%), Pool QC (93%), Fence (80%), Misc Feature (48%), and Lot Frontage (16%). Notably, the first four variables can be substituted with descriptive categories to indicate the absence of certain features. Specifically, "no alley access" (NAA), "no fireplace" (NFP), "no pool" (NP), and "no miscellaneous features" (NMF) respectively. However, the lot frontage variable cannot be replaced using such descriptive categories as there is no available information to determine the meaning behind the missing values. As a result, the NA values in this variable can be omited. 
-
+Within the Ames dataset, there are five variables that contain a substantial number of missing values. These variables and their corresponding percentages of missing values are as follows: Alley (99%), Fire Place Qu (96%), Pool QC (93%), Fence (80%), Misc Feature (48%), and Lot Frontage (16%). Notably, the first four variables can be substituted with descriptive categories to indicate the absence of certain features. Specifically, "no alley access" (NAA), "no fireplace" (NFP), "no pool" (NP), and "no miscellaneous features" (NMF) respectively.  
 ```{r}
 AmesHousing$Alley <- replace(AmesHousing$Alley, is.na(AmesHousing$Alley), "NAA")
 AmesHousing$`Fireplace Qu` <- replace(AmesHousing$`Fireplace Qu`, 
@@ -60,67 +60,54 @@ AmesHousing$`Pool QC` <- replace(AmesHousing$`Pool QC`, is.na(AmesHousing$`Pool 
 AmesHousing$Fence <- replace(AmesHousing$Fence, is.na(AmesHousing$Fence), "NF")
 AmesHousing$`Misc Feature` <- replace(AmesHousing$`Misc Feature`, 
                                       is.na(AmesHousing$`Misc Feature`), "NMF")
-AmesHousing
 ```
 
-The presence of NA values in the garage-related variables, namely garage type (nominal), garage cond (ordinal), garage qual (nominal), garage finish (nominal), and garage yr blt (discrete), indicates the absence of a garage in the respective houses. It is worth noting that these variables collectively exhibit a consistent occurrence rate of 5% (157 values for every variable) for NA values. To address the missing values in the nominal and ordinal variables, a suitable approach is to substitute the NA values with the "no garage" (NG) category. This maintains consistency in the dataset and facilitates further analysis and interpretation. However, given that the "garage yr blt" variable represents discrete construction years, it is not advisable to replace its NA values with "no garage" or any other specific value. Omitting the NA values in this variable would be a more appropriate course of action. Consequently, by omitting the NA values in the "garage yr blt" variable, the NA values in the remaining four garage-related variables will also be eliminated.
-
-Among the basement-related variables in the dataset, several variables exhibit a consistent occurrence of 2% NA values. These variables include "bsmt exposure" (with 83 NA values), "bsmt qual" (with 80 NA values), "bsmt cond" (with 80 NA values), "bsmtfin type 1" (with 80 NA values), and "bsmtfin type 2" (with 81 NA values). It is worth noting that the number of NA values in each variable is not uniform, making it unwise to assume and replace all NA values with a generic category such as "no basement." Given the relatively insignificant percentage of NA values in these variables, it is reasonable to omit the NA values during analysis. This omission would lead to the elimination of the NA values in other basement-related variables, namely "bsmt full bath," "bsmt half bath," "bsmtfin sf 1," "bsmtfin sf 2," "bsmt unf sf," and "total bsmt sf."
-
-The "Mas Vnr Type" and "Mas Vnr Area" variables in the dataset have two missing values each, signifying the absence or unavailability of information regarding the type or area measurement of the masonry veneer for certain properties. Therefore, it is appropriate to remove these missing values from the dataset. Similarly, the "Electrical" variable has one missing value, suggesting missing or unavailable information about the type of electrical system in a specific house. This missing value can also be omitted from the analysis. Additionally, the "Garage Cars" and "Garage Area" variables each have one missing value, representing missing information related to the number of cars the garage can accommodate and the area of the garage, respectively. Omitting these missing values ensures data integrity and enables analysis based on complete and reliable information for the respective variables.
-
-In summary, all other NA values present in the dataset besides the NA values for the variables: "Alley", "Fire Place Qu", "Pool QC", "Fence" and "Misc Feature", will be ommited. This will result to the dataset having 
-
-The above adjustments resulted in the dataset having 2218 observations instead of the initial 2930 observations, meaning 712 (24.3%) observations were ommited. 
-```{r}
-```
-Identify observations with a non-missing value in "Garage Type" but missing values in garage-related variables
-
-```{r}
-AmesHousing <- subset(AmesHousing, select = -`Garage Yr Blt`)
-```
-
-```{r}
-AmesHousing$`Has Garage` <- NA
-AmesHousing$`Has Garage` <- ifelse(AmesHousing$`Garage Area` == 0, 0, 1)
-```
-
-Removing spaces from variables for effective imputation (Using the mice package)
+The lot frontage variable cannot be replaced using such descriptive categories (as above) as there is no available information to determine the meaning behind the missing values. As a result, the imputation approach will be used to handle the missing values in the variable.
+a) Removing spaces from variables for effective imputation.
 ```{r}
 names(AmesHousing)[5] <- "LotFrontage"
 names(AmesHousing)[6] <- "LotArea"
 names(AmesHousing)[9] <- "LotShape"
 names(AmesHousing)[4] <- "MSZoning"
 names(AmesHousing)[12] <-"LotConfig"
-
 ```
-
+b) Imputation is the done to address missing values in the "Lot Frontage" variable using the mice package. It uses predictive mean matching as the imputation method, running up to 50 iterations to generate one imputed dataset. The result is extracted in a long format, including both the original data and the imputed values, ensuring a comprehensive dataset with no missing values.
 ```{r}
 vars <- c("LotFrontage", "LotArea", "LotShape", "Neighborhood", "MSZoning", "Street", "LotConfig")
 dataset <- AmesHousing[, vars]
 imp_model <- mice(dataset, method = "pmm", m = 1, maxit = 50)
 imputed_data <- complete(imp_model, action = "long", include = TRUE)
 AmesHousing$LotFrontage <- imputed_data$LotFrontage[2931:5860]
-AmesHousing$`Lot Frontage` <- AmesHousing$LotFrontage
 ```
-
-Returning the variables be its original format
+c) Returning the variables be its original format
 ```{r}
 names(AmesHousing)[5] <- "Lot Frontage"
 names(AmesHousing)[6] <- "Lot Area"
 names(AmesHousing)[9] <- "Lot Shape"
 names(AmesHousing)[4] <- "MS Zoning"
-names(AmesHousing)[12] <-"Lot Config"
+names(AmesHousing)[12] <- "Lot Config"
 ```
 
-Assign "NG" (No garage) to variables when `Has Garage` is 0
+The presence of NA values in the garage-related variables, namely garage type (nominal), garage cond (ordinal), garage qual (nominal), garage finish (nominal), and garage yr blt (discrete), indicates the absence of a garage in the respective houses. It is worth noting that these variables collectively exhibit a consistent occurrence rate of 5% (157 values for every variable) for NA values. To address the missing values in the nominal and ordinal variables, a suitable approach is to substitute the NA values with the "no garage" (NG) category. This maintains consistency in the dataset and facilitates further analysis and interpretation. Regarding the garage yr built variable, the presence of null values signifies that the properties do not have garages. Since substituting these values with meaningful information is not feasible, a dummy variable named Has Garage is created. This variable takes the value 0 to represent "no garage" and 1 to indicate "garage present."
+a) Removing the garage year built variable from the dataset. 
+```{r}
+AmesHousing <- subset(AmesHousing, select = -`Garage Yr Blt`)
+```
+b) Creating a dummy variable "Has Garage" that takes the value 0 to represent "no garage" and 1 to indicate "garage present".
+```{r}
+AmesHousing$`Has Garage` <- NA
+AmesHousing$`Has Garage` <- ifelse(AmesHousing$`Garage Area` == 0, 0, 1)
+```
+c) Assign "NG" (No garage) to variables when `Has Garage` is 0
 ```{r}
 AmesHousing$`Garage Type`[AmesHousing$`Has Garage` == 0] <- "NG"
 AmesHousing$`Garage Cond`[AmesHousing$`Has Garage` == 0] <- "NG"
 AmesHousing$`Garage Finish`[AmesHousing$`Has Garage` == 0] <- "NG"
 AmesHousing$`Garage Qual`[AmesHousing$`Has Garage` == 0] <- "NG"
 ```
-Assing "NB" (No basement) to variables when `Total Bsmt SF` is 0
+
+Among the basement-related variables in the dataset, several variables exhibit a consistent occurrence of 2% NA values. These variables include "bsmt exposure" (with 83 NA values), "bsmt qual" (with 80 NA values), "bsmt cond" (with 80 NA values), "bsmtfin type 1" (with 80 NA values), and "bsmtfin type 2" (with 81 NA values). It is worth noting that the number of NA values in each variable is not uniform, making it unwise to assume and replace all NA values with a generic category such as "no basement." Given the relatively insignificant percentage of NA values in these variables, it is reasonable to omit the NA values during analysis. This omission would lead to the elimination of the NA values in other basement-related variables, namely "bsmt full bath," "bsmt half bath," "bsmtfin sf 1," "bsmtfin sf 2," "bsmt unf sf," and "total bsmt sf."
+Assing "NB" (No basement) to variables when `Total Bsmt SF` is 0.
 ```{r}
 AmesHousing$`Bsmt Exposure`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
 AmesHousing$`Bsmt Cond`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
@@ -128,12 +115,18 @@ AmesHousing$`Bsmt Qual`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
 AmesHousing$`BsmtFin Type 1`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
 AmesHousing$`BsmtFin Type 2`[AmesHousing$`Total Bsmt SF` == 0] <- "NB"
 ```
-Omit any other null values in the dataset
+
+The "Mas Vnr Type" and "Mas Vnr Area" variables in the dataset have two missing values each, signifying the absence or unavailability of information regarding the type or area measurement of the masonry veneer for certain properties. Therefore, it is appropriate to remove these missing values from the dataset. Similarly, the "Electrical" variable has one missing value, suggesting missing or unavailable information about the type of electrical system in a specific house. This missing value can also be omitted from the analysis. Additionally, the "Garage Cars" and "Garage Area" variables each have one missing value, representing missing information related to the number of cars the garage can accommodate and the area of the garage, respectively. Omitting these missing values ensures data integrity and enables analysis based on complete and reliable information for the respective variables.
+
+All other NA values present in the dataset, including the variables already discussed above that have NA observations remaining, is be omitted. 
 ```{r}
 AmesHousing <- na.omit(AmesHousing)
-AmesHousing <- AmesHousing[,1:82]
-nrow(AmesHousing)
 ```
+Now this is the cleaned dataset that will be used for the study.
+
+_____________________________________________________________________________________________________________________________________________________________________________________________
+SECTION 2: DATA EXPLORATION
+_____________________________________________________________________________________________________________________________________________________________________________________________
 
 Checking for outliers in the SalePrice variable
 ```{r}
