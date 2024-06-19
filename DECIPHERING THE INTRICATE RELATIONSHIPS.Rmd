@@ -18,6 +18,9 @@ library(RColorBrewer)
 library(mice)
 library(FactoMineR)
 library(factoextra)
+library(caret)
+library(randomForest)
+library(tibble)
 ```
 
 Importing the Ames Housing dataset.
@@ -195,65 +198,58 @@ ________________________________________________________________________________
 SECTION 3: MACHINE LEARNING TECHNIQUES (ALGORITHMS)
 ______________________________________________________________________________________________________________________
 
-1. Random Forest
-
-Random forest model that uses all the explanatory variables from the AmesHousing dataset to predict the saling price of a property (House)
-
-Packages needed
+A seed value of 1 has been utilised to ensure reproducibility. 
 ```{r}
-library(readxl)
-library(caret)
-library(randomForest)
-library(tibble)
-```
-Loading the pre-processed AmesHousing dataset inclusive of outliers
-```{r}
-data <- read_excel("Clean_AmesHousing.xlsx")
-```
-The model was fitted initially, but the presence of outliers has resulted in an increased mean absolute error. Consequently, to address this issue, the model will be refitted using a dataset from which the outliers have been removed.
-```{r}
-# Calculate z-scores
-z_scores <- scale(data$SalePrice)
-
-# Set the threshold for outliers
-threshold <- 3
-
-# Remove outliers
-data <- data[abs(z_scores) < threshold, ]
-```
-Modifying the variable names because the randomForest function is sensitive to special characters
-```{r}
-new_names <- gsub(" ", "", names(data))
-names(data) <- new_names
-names(data)[22] <- "YearRemodORAdd"
-names(data)[45] <- "FstFlrSF"
-names(data)[46] <- "ScndFlrSF"
-names(data)[70] <- "ThreeSsnPorch"
+set.seed(1)
 ```
 
-Remove unnecessary variables
+Remove the unnecessary variables for this section as they carry no information that affects the Selling Price of houses.
 ```{r}
-data <- subset(data, select = -c(PID, Order))
+AmesHousing <- subset(AmesHousing, select = -c(PID, Order))
 ```
+
+Splitting the dataset into a 70:30 training and testing sets to allow for evaluating the model's performance on unseen data, which helps in building more robust models less prone to overfitting. Furthermore, transforming the train and test sets into matrices is done for ensuring compatibility with machine learning algorithms that typically require data in matrix format for training and prediction.
+dataset
+```{r}
+response <- "SalePrice"
+y <- data[[response]]
+x <- data[, !colnames(data) %in% response]
+train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
+train_X <- as.matrix(x[train_indices, ])
+train_Y <- y[train_indices]
+test_X <- as.matrix(x[-train_indices, ])
+test_Y <- y[-train_indices]
+```
+
+1. Random Forest --- Random forest is a versatile and powerful machine learning algorithm that 
+      utilizes an ensemble learning method to build multiple decision trees and combine their
+      predictions for more accurate results.
+_________________________________________________________________________________________________
+  
+a) Full Model (Using all explainatory variables)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Recalling the cleaned dataset and renaming it "dataRF" for temporal use in the Random Forest section only.
+```{r}
+dataRF <- AmesHousing
+```
+
+Modifying the variable names because the randomForest function is sensitive to special characters.
+```{r}
+new_names <- gsub(" ", "", names(dataRF))
+names(dataRF) <- new_names
+names(dataRF)[22] <- "YearRemodORAdd"
+names(dataRF)[45] <- "FstFlrSF"
+names(dataRF)[46] <- "ScndFlrSF"
+names(dataRF)[70] <- "ThreeSsnPorch"
+```
+
+
 Overall Mean of the SalePrice
 ```{r}
 mean <- mean(data$SalePrice)
 mean
 ```
-To train the random forest model, a 70/30 ratio split was used for the training and testing datasets. Initially, 1000 trees were fitted, and the model's performance was evaluated based on the highest $R^2$ value and the lowest mean squared error (MSE). From the 1000 trees, the best-performing model was selected for further analysis and use.
-```{r}
-set.seed(1)
-# Split the data into training and testing sets (or use cross-validation)
-set.seed(1)
-target <- "SalePrice"
-y <- data[[target]]
-data1 <- data[, !colnames(data) %in% target]
-train_indices <- createDataPartition(y, p = 0.7, list = FALSE)
-train_X <- as.matrix(data1[train_indices, ])
-train_Y <- y[train_indices]
-test_X <- as.matrix(data1[-train_indices, ])
-test_Y <- y[-train_indices]
-```
+
 
 Visualisation of feature importance
 ```{r}
