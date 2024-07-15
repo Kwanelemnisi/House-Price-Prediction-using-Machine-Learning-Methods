@@ -21,6 +21,7 @@ library(factoextra)
 library(caret)
 library(randomForest)
 library(tibble)
+library(ggplot2)
 ```
 
 Importing the Ames Housing dataset.
@@ -154,6 +155,7 @@ outliers <- AmesHousing[outliers, ]
 ```
 Based on the z-scores approach, a thorough analysis reveals the presence of 44 outliers within the Sale Price variable. While outliers often require careful consideration and treatment in data cleaning processes, this particular study refrains from addressing them during the initial dataset cleaning stage. This decision stems from the fact that the proposed algorithms employed in the study possess the ability to handle outliers, and furthermore, there exists a possibility that these outliers may hold valuable insights or unique characteristics worth exploring further.
 
+
 Correlation Plot for all numeric variables in the Ames Dataset, excluding the "Order" Variable which is column 1.
 ```{r}
 numeric_cols <- AmesHousing[sapply(AmesHousing, is.numeric)][,-1]
@@ -161,6 +163,7 @@ cor_matrix <- cor(numeric_cols)
 corrplot(cor_matrix, method = "color",tl.cex = 0.5, col = colorRampPalette(brewer.pal(11, "RdYlBu"))(100))
 ```
 The correlation heatmap reveals crucial insights into the dataset, showing the correlations between variables. Notably, there is a substantial positive correlation of 81.36% between Total Bsmt SF and 1st Flr SF, indicating that as the total basement area increases, so does the area on the first floor. Additionally, the correlation of 80.75% between TotRms AbvGrd and Gr Liv Area suggests that houses with more rooms above ground level tend to have larger ground living areas. Concerning the target variable, SalePrice, it exhibits a strong correlation with two key features. First, the Overall Qual) shows a correlation of 79.93%, implying that higher overall quality in a house is associated with higher sale prices. Second, the Gr Liv Area demonstrates a correlation of 70.86%, indicating that homes with larger ground living areas tend to achieve higher selling prices.
+
 
 Calculating and analysing the mean sale price for every year. 
 ```{r}
@@ -170,6 +173,7 @@ data <- data.frame(Year_Sold, Sale_Price)
 (means <- aggregate(Sale_Price ~ Year_Sold, AmesHousing, mean))
 ```
 The mean sale prices of houses in the Ames housing market from 2006 to 2010 showns an intriguing trend. The market experienced steady growth from 2006 to 2007, with the average sale price increasing from $180 879.60 to $184 728.70. This upswing can be attributed to a growing economy, increased housing demand, and possible inflationary pressures. However, in 2008, the average sale price slightly decreased to $178 587.30, which might be linked to the onset of the global financial crisis during that period, leading to a slowdown in the housing market. Despite the challenging financial crisis, the market exhibited resilience, rebounding to a mean sale price of $181 026.80 in 2009 and maintaining relative stability. In 2010, there was a more significant drop in the mean sale price to $172 323.80, which could be associated with the lingering effects of the financial crisis and the slower recovery process.
+
 
 Checking how many variables will be optimal to use for our reduced model so that at least 80% of the variation in the response variable is explained. 
 a) Creating a temporal dataset which is a duplicate of the AmesHousing dataset and transforming all variables to be numeric variables as it is required by the Principal Component Analysis (PCA) in order to determine the number of components (features) that explain at least 80% of the variation in the dataset
@@ -285,52 +289,53 @@ cat("The Mean Absolute Error is: ", mae, "\n")
 cat("The relative size of the MAE compared to the average value of the data is:",perc,"%", "\n")
 ```
 
+
 To visualize the difference between the observed and predicted sale prices, a line plot can be generated. This plot will effectively illustrate the variance between the two variables.
 ```{r}
-# Create a sequence of numbers for the x-axis
 x <- seq_along(comb$Obs)
-# Disable scientific notation on the y-axis
 options(scipen = 999)
 par(las = 2, # Adjust margin
     cex.axis = 0.6) # Adjust axis label size
-
 par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
-
-# Plot the line graph
 plot(x, comb$Obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
-
-# Add the line for predicted values
 lines(x, comb$Pred, col = "red", lwd = 2)
-
-# Add a legend
 legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
-
 ```
 
-To optimize the random forest model, a reduced version will be fitted using the top 40 variables. These variables were carefully selected based on the %incNodePurity metric, which emphasizes the quality of split points in the decision tree. Through experimentation, it was discovered that reducing the number of variables further increased the mean absolute error and decreased the R^2 value. Consequently, the decision was made to utilize the top 40 variables, chosen based on their %incNodePurity scores. This approach was favored over using the %IncMSE variables, as they yielded inferior model performance.
-```{r}
-importance_scores <- importance(data.rf, type=2)
 
+b) Reduced Model (Using 40 Variables)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To optimize the random forest model, a reduced version will be fitted using the top 40 variables (as ascertained by the PAC technique). These variables were carefully selected based on the %incNodePurity metric, which emphasizes the quality of split points in the decision tree. Through experimentation, it was discovered that reducing the number of variables further increased the mean absolute error and decreased the R^2 value. Consequently, the decision was made to utilize the top 40 variables, chosen based on their %incNodePurity scores. This approach was favored over using the %IncMSE variables, as they yielded inferior model performance.
+```{r}
+importance_scoresRF <- importance(data.rf, type=2)
 # Convert the matrix to a data frame and include the row names as a variable
-importance_df <- as.data.frame(importance_scores) %>%
+importance_dfRF <- as.data.frame(importance_scoresRF) %>%
   rownames_to_column(var = "Feature")
-
 # Sort the data frame by importance scores in descending order
-importance_df <- importance_df[order(importance_df$IncNodePurity, decreasing = TRUE), ][1:40,]
+importance_dfRF <- importance_dfRF[order(importance_dfRF$IncNodePurity, decreasing = TRUE), ][1:40,]
 ```
 
-```{r}
-# Load the ggplot2 library
-library(ggplot2)
 
-# Create the bar chart
+
+
+Creating a side bar graph to visualise the featured and their respective importance scores
 ggplot(importance_df, aes(y = reorder(Feature, IncNodePurity), x = IncNodePurity)) +
   geom_bar(stat = "identity", fill = "blue") +
   labs(y = "Variable Name", x = "IncNodePurity Score", title = "Top 40 Important Variables") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
 ```
-```{r}
-```
+It becomes evident when observing the plot that certain key features wield significant influence in
+determining a property’s sale price. Ranking these factors in order of importance, the top five influential elements
+are as follows: first, the overall quality of the property emerges as the most decisive determinant, indicating
+a positive correlation between higher overall quality and elevated sale prices. Second, the ground living area,
+representing the total floor space dedicated to living quarters, also exhibits substantial sway over the property’s
+value. Third, the year built, reflecting the property’s age, exerts a discernible impact, with newer constructions
+generally commanding higher prices. Fourth, the external quality, which assesses the condition of the property’s
+exterior, is another crucial factor affecting the sale price. Lastly, the total basement surface area secures a spot
+16
+among the top five features, implying that properties boasting more extensive basement spaces tend to fetch
+higher prices.
 
 Fitting the reduced random forest model
 
@@ -384,6 +389,7 @@ cat("The Root Mean Squared Error is: ", rmse, "\n")
 cat("The Mean Absolute Error is: ", mae, "\n")
 cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
 ```
+
 
 Generating a line plot to visualize the difference between the observed and predicted sale price. 
 ```{r}
