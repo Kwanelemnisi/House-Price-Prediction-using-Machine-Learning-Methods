@@ -8,6 +8,11 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+Support vector regression (SVR) is a method that uses the support vector machine (SVM) algorithm to perform regression analysis. While SVM is an algorithm mainly used for classification problems, it can also be extended to regression problems by adjusting the loss function. The primary objective of
+SVR is to identify the function that best approximates the relationship between the input and output variables. This is done by transforming the original data into a higher-dimensional space using a kernel function, which allows the algorithm to detect non-linear relationships between the input and output variables.
+
+
 Load the required package
 ```{r}
 library(kernlab)
@@ -16,41 +21,28 @@ library(dplyr)
 library(caret)
 library(ggplot2)
 ```
-Load data, remove unnecessary variables and then change categorical data into numeric data
+
+Full Model (Using all features)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Loading data, removing unnecessary variables, setting a seed value for reproduction, changeing categorical data into numeric data since SVR only allows numeric data and calculating the mean of the selling price for comparison reasons.
 ```{r}
 data <- read_excel("Clean_AmesHousing.xlsx")
-```
-
-```{r}
-# Calculate z-scores
-z_scores <- scale(data$SalePrice)
-
-# Set the threshold for outliers
-threshold <- 3
-
-# Remove outliers
-data <- data[abs(z_scores) < threshold, ]
-```
-
-```{r}
 data <- subset(data, select = -c(PID, Order))
-mean <- mean(data$SalePrice)
-
+set.seed(1)
 target_column_index <- 79
-
 features <- data[,-target_column_index]
-
 categorical_var <- names(data %>%
                            select_if(is.character))
-
 for (col in categorical_var) {
   data[[col]] <- as.numeric(factor(data[[col]]))
 }
+mean <- mean(data$SalePrice)
 ```
 
+Splitting the dataset into a 70:30 training and testing sets to allow for evaluating the model's performance on unseen data, which helps in building more robust models less prone to overfitting. Furthermore, transforming the train and test sets into matrices is done for ensuring compatibility with machine learning algorithms that typically require data in matrix format for training and prediction.
+dataset
 ```{r}
-# Split the data into training and testing sets (or use cross-validation)
-set.seed(1)
 target <- "SalePrice"
 y <- data[[target]]
 data1 <- data[, !colnames(data) %in% target]
@@ -61,32 +53,30 @@ test_X <- as.matrix(data1[-train_indices, ])
 test_Y <- y[-train_indices]
 ```
 
-Create the SVR model using the ksvm function
+Fitting the SVR model using the ksvm function
 ```{r}
 svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
 ```
 
-
+Predicting the selling prices of houses using the fitted model.
 ```{r}
 predictions <- predict(svr_model, test_X)
-comb <- data.frame(obs = test_Y, pred = round(predictions,0))
-print(head(comb))
+(comb <- data.frame(obs = test_Y, pred = round(predictions,0)))
 ```
 
-Evaluate the model
+Evaluating the model using the test set.
 ```{r}
 r_squared <- round(cor(predictions, test_Y)^2 *100,0)
 rmse <- sqrt(mean((test_Y - predictions)^2))
 mae <- mean(abs(test_Y - predictions))
 perc <- round((mae/mean)*100,2)
-
-# Print the evaluation metrics
 cat("R-squared:", r_squared,"%", "\n")
 cat("RMSE:", rmse, "\n")
 cat("MAE:", mae, "\n")
 cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
 ```
-Visualisation
+
+Visualising the predicted values vs the observed values using a line graph.
 ```{r}
 # Create a sequence of numbers for the x-axis
 x <- seq_along(comb$obs)
@@ -94,31 +84,26 @@ x <- seq_along(comb$obs)
 options(scipen = 999)
 par(las = 2, # Adjust margin
     cex.axis = 0.6) # Adjust axis label size
-
 par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
-
 # Plot the line graph
 plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
-
 # Add the line for predicted values
 lines(x, comb$pred, col = "red", lwd = 2)
-
 # Add a legend
 legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
 ```
 
+Reduced Model (Using Top 40 Features)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
+Feature Selection using Recursive Feature Elimination (RFE) in order to get the top40 variables for the reduced model.
 ```{r}
 # Define the 'svmRadial' function for the SVR method
 svmRadial_func <- function(x, y, ...){
   kernlab::ksvm(x, y, type = "eps-svr", kernel = "rbfdot", kpar = "automatic", ...)
 }
-
 # Create the caretFuncs list with the 'svmRadial' function
 caretFuncs <- list(svmRadial = svmRadial_func)
-
 # Feature Selection using Recursive Feature Elimination (RFE)
 num_features_to_select <- 40  # Set the desired number of features
 ctrl <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
@@ -126,14 +111,10 @@ rfe_results <- rfe(train_X, train_Y,
                    sizes = num_features_to_select,
                    rfeControl = ctrl,
                    method = "svmRadial")
-```
-
-
-```{r}
 top40 <- data.frame(rfe_results$variables[318:357,1:2])
 ```
 
-Create the bar chart
+Creating the bar chart to visualize the top40 variables recomended by the RFE approach.
 ```{r}
 ggplot(top40, aes(y = reorder(var, Overall), x = Overall)) +
   geom_bar(stat = "identity", fill = "blue") +
@@ -141,7 +122,7 @@ ggplot(top40, aes(y = reorder(var, Overall), x = Overall)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
 ```
 
-Create the data for modeling (removing the target variable)
+Splitting the dataset into a train and test set.
 ```{r}
 features <- data[,-target_column_index]
 top40 <- top40$var
@@ -150,33 +131,32 @@ train_X <- as.matrix(top40[train_indices, ])
 test_X <- as.matrix(top40[-train_indices, ])
 ```
 
-Create the SVR model using the ksvm function
+Fitting the SVR model using the ksvm function.
 ```{r}
 svr_model <- ksvm(train_X, train_Y, type="eps-svr", kernel="rbfdot", kpar="automatic")
 ```
 
+Predicting the Sale Price using the SVR model.
 ```{r}
 predictions <- predict(svr_model, as.matrix(test_X))
 comb <- data.frame(obs = test_Y, pred = round(predictions,0))
 print(head(comb))
 ```
 
-Evaluate the model
+Evaluating the reduced model
 ```{r}
 r <- 1 - sum((test_Y - predictions)^2) / sum((test_Y - mean(test_Y))^2)
 r_squared <- round(cor(predictions, test_Y)^2 *100,0)
 rmse <- sqrt(mean((test_Y - predictions)^2))
 mae <- mean(abs(test_Y - predictions))
 perc <- round((mae/mean)*100,2)
-
-# Print the evaluation metrics
 cat("R-squared:", r_squared,"%",r, "\n")
 cat("RMSE:", rmse, "\n")
 cat("MAE:", mae, "\n")
 cat("The relative size of the MAE compared to the average SalePrice of the dataset is:",perc,"%", "\n")
-
 ```
-Visualisation
+
+Visualizing the predicted vs observed values of the selling price of houses.
 ```{r}
 # Create a sequence of numbers for the x-axis
 x <- seq_along(comb$obs)
@@ -184,16 +164,11 @@ x <- seq_along(comb$obs)
 options(scipen = 999)
 par(las = 2, # Adjust margin
     cex.axis = 0.6) # Adjust axis label size
-
 par(mar = c(4, 4, 3, 5.6)) # c(bottom, left, top, right)
-
 # Plot the line graph
 plot(x, comb$obs, type = "l", col = "blue", lwd = 2, xlab = "Index", ylab = "Sale Price", main = "Observed vs Predicted")
-
 # Add the line for predicted values
 lines(x, comb$pred, col = "red", lwd = 2)
-
 # Add a legend
 legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col = c("blue", "red"), lty = 1, lwd = 2,xpd=TRUE , cex = 0.7, inset = c(-0.2, 0))
-
 ```
