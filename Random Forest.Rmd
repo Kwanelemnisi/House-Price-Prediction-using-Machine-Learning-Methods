@@ -23,7 +23,7 @@ library(randomForest)
 library(tibble)
 ```
 
-Loading the pre-processed AmesHousing dataset,
+Loading the pre-processed AmesHousing dataset.
 ```{r}
 data <- read_excel("Clean_AmesHousing.xlsx")
 ```
