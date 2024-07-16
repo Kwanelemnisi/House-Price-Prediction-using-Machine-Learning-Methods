@@ -19,7 +19,6 @@ library(mice)
 library(FactoMineR)
 library(factoextra)
 library(caret)
-library(randomForest)
 library(tibble)
 library(ggplot2)
 ```
