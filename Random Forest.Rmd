@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Random forest is a versatile and powerful machine learning algorithm that utilizes an ensemble learning method to build multiple decision trees and combine their predictions for more accurate results.
 
 Full Model (Uses all the explanatory variables)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+________________________________________________
 
 Calling Packages needed.
 ```{r}
@@ -118,7 +118,7 @@ legend(x = "right",y= mean(comb$Obs), legend = c("Observed", "Predicted"), col =
 ```
 
 Reduced Model (Using top40 variables)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_____________________________________
 
 To optimize the random forest model, a reduced version will be fitted using the top 40 variables (as ascertained by the PAC technique). These variables were carefully selected based on the %incNodePurity metric, which emphasizes the quality of split points in the decision tree. Through experimentation, it was discovered that reducing the number of variables further increased the mean absolute error and decreased the R^2 value. Consequently, the decision was made to utilize the top 40 variables, chosen based on their %incNodePurity scores. This approach was favored over using the %IncMSE variables, as they yielded inferior model performance.
 ```{r}
