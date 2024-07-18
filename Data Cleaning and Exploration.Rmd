@@ -84,7 +84,7 @@ imp_model <- mice(dataset, method = "pmm", m = 1, maxit = 50)
 imputed_data <- complete(imp_model, action = "long", include = TRUE)
 AmesHousing$LotFrontage <- imputed_data$LotFrontage[2931:5860]
 ```
-c) Returning the variables be its original format
+c) Returning the variables to its original format.
 ```{r}
 names(AmesHousing)[5] <- "Lot Frontage"
 names(AmesHousing)[6] <- "Lot Area"
@@ -103,7 +103,7 @@ b) Creating a dummy variable "Has Garage" that takes the value 0 to represent "n
 AmesHousing$`Has Garage` <- NA
 AmesHousing$`Has Garage` <- ifelse(AmesHousing$`Garage Area` == 0, 0, 1)
 ```
-c) Assign "NG" (No garage) to variables when `Has Garage` is 0
+c) Assign "NG" (No garage) to variables when `Has Garage` is 0.
 ```{r}
 AmesHousing$`Garage Type`[AmesHousing$`Has Garage` == 0] <- "NG"
 AmesHousing$`Garage Cond`[AmesHousing$`Has Garage` == 0] <- "NG"
@@ -176,7 +176,7 @@ The mean sale prices of houses in the Ames housing market from 2006 to 2010 show
 
 
 Checking how many variables will be optimal to use for our reduced model so that at least 80% of the variation in the response variable is explained. 
-a) Creating a temporal dataset which is a duplicate of the AmesHousing dataset and transforming all variables to be numeric variables as it is required by the Principal Component Analysis (PCA) in order to determine the number of components (features) that explain at least 80% of the variation in the dataset
+a) Creating a temporal dataset which is a duplicate of the AmesHousing dataset and transforming all variables to be numeric variables as it is required by the Principal Component Analysis (PCA) in order to determine the number of components (features) that explain at least 80% of the variation in the dataset.
 ```{r}
 pacdata <- AmesHousing
 categorical_var <- names(pacdata %>%
@@ -189,7 +189,7 @@ b) Perform PCA. The PCA (Principal Component Analysis) technique is used to redu
 ```{r}
 pca_result <- PCA(AmesHousing[,!colnames(AmesHousing) %in% "SalePrice"] , graph = FALSE)
 ```
-c) Determining the number of components to retain based on explained variance Finding the number of components that explain at least 80% of the variance
+c) Determining the number of components to retain based on explained variance Finding the number of components that explain at least 80% of the variance.
 ```{r}
 explained_variance <- pca_result$eig[, 2]  # Percentage of variance explained
 cumulative_variance <- cumsum(explained_variance)
