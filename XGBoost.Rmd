@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 XGBoost, also known as eXtreme Gradient Boosting, is a popular open-source software library for gradient boosting. This framework builds an ensemble of weak models to create a more robust and accurate final model.
 
 Full Model (Using all the explanatory variables)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+________________________________________________
 
 Loading Packages needed.
 ```{r}
@@ -127,7 +127,7 @@ legend(x = "right", y = legend_y, legend = c("Observed", "Predicted"),
 ```
 
 Reduced Model (Using Top 40 variables)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+______________________________________
 
 Getting the top40 variables based on the XGBoost feature Selection.
 ```{r}
