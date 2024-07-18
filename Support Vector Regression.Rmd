@@ -23,7 +23,7 @@ library(ggplot2)
 ```
 
 Full Model (Using all features)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_______________________________
 
 Loading data, removing unnecessary variables, setting a seed value for reproduction, changeing categorical data into numeric data since SVR only allows numeric data and calculating the mean of the selling price for comparison reasons.
 ```{r}
@@ -94,7 +94,7 @@ legend(x = "right",y= mean(comb$obs), legend = c("Observed", "Predicted"), col =
 ```
 
 Reduced Model (Using Top 40 Features)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_____________________________________
 
 Feature Selection using Recursive Feature Elimination (RFE) in order to get the top40 variables for the reduced model.
 ```{r}
